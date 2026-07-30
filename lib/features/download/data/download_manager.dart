@@ -209,4 +209,57 @@ class DownloadManager {
     _progress.clear();
     _cancelling.clear();
   }
+
+  Future<List<CachedChapterInfo>> getCachedChapterDetails() async {
+    final root = await _cacheRoot;
+    if (!await root.exists()) return [];
+
+    final chapters = <CachedChapterInfo>[];
+    await for (final entity in root.list()) {
+      if (entity is Directory) {
+        final dirName = entity.path.split(Platform.pathSeparator).last;
+        int pageCount = 0;
+        int totalSize = 0;
+        await for (final file in entity.list()) {
+          if (file is File && file.path.endsWith('.enc')) {
+            pageCount++;
+            totalSize += await file.length();
+          }
+        }
+        if (pageCount > 0) {
+          chapters.add(CachedChapterInfo(
+            contentId: dirName,
+            pageCount: pageCount,
+            totalSize: totalSize,
+            lastModified: entity.statSync().modified,
+          ));
+        }
+      }
+    }
+
+    chapters.sort((a, b) => b.lastModified.compareTo(a.lastModified));
+    return chapters;
+  }
+}
+
+class CachedChapterInfo {
+  final String contentId;
+  final int pageCount;
+  final int totalSize;
+  final DateTime lastModified;
+
+  const CachedChapterInfo({
+    required this.contentId,
+    required this.pageCount,
+    required this.totalSize,
+    required this.lastModified,
+  });
+
+  String get formattedSize {
+    if (totalSize < 1024) return '$totalSize B';
+    if (totalSize < 1024 * 1024) {
+      return '${(totalSize / 1024).toStringAsFixed(1)} KB';
+    }
+    return '${(totalSize / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
 }

@@ -18,12 +18,14 @@ class PageViewerScreen extends ConsumerStatefulWidget {
   ConsumerState<PageViewerScreen> createState() => _PageViewerScreenState();
 }
 
-class _PageViewerScreenState extends ConsumerState<PageViewerScreen> {
+class _PageViewerScreenState extends ConsumerState<PageViewerScreen>
+    with SingleTickerProviderStateMixin {
   final PageController _pageController = PageController();
   final Map<int, Uint8List> _loadedPages = {};
   final Map<int, bool> _loadingPages = {};
   final Map<int, String?> _pageErrors = {};
   final Map<int, TransformationController> _transformControllers = {};
+  final Map<int, GlobalKey<_ZoomablePageState>> _zoomKeys = {};
   int _currentPage = 1;
   bool _isZoomed = false;
 
@@ -47,6 +49,10 @@ class _PageViewerScreenState extends ConsumerState<PageViewerScreen> {
     super.dispose();
   }
 
+  GlobalKey<_ZoomablePageState> _getZoomKey(int pageNo) {
+    return _zoomKeys.putIfAbsent(pageNo, () => GlobalKey<_ZoomablePageState>());
+  }
+
   TransformationController _getController(int pageNo) {
     return _transformControllers.putIfAbsent(
       pageNo,
@@ -58,8 +64,7 @@ class _PageViewerScreenState extends ConsumerState<PageViewerScreen> {
     final currentController = _transformControllers[_currentPage];
     if (currentController == null) return;
 
-    final value = currentController.value;
-    final scale = value.getMaxScaleOnAxis();
+    final scale = currentController.value.getMaxScaleOnAxis();
     final isCurrentlyZoomed = scale > 1.05;
 
     if (isCurrentlyZoomed != _isZoomed) {
@@ -132,32 +137,13 @@ class _PageViewerScreenState extends ConsumerState<PageViewerScreen> {
   }
 
   void _resetZoom() {
-    final controller = _transformControllers[_currentPage];
-    if (controller != null) {
-      controller.value = Matrix4.identity();
-    }
-    if (_isZoomed) {
-      setState(() => _isZoomed = false);
-    }
+    final key = _zoomKeys[_currentPage];
+    key?.currentState?.animateResetZoom();
   }
 
   void _onDoubleTap(TapDownDetails details, int pageNo) {
-    final controller = _getController(pageNo);
-    final currentScale = controller.value.getMaxScaleOnAxis();
-
-    if (currentScale > 1.1) {
-      controller.value = Matrix4.identity();
-      setState(() => _isZoomed = false);
-    } else {
-      final tapPosition = details.localPosition;
-      final targetScale = 2.5;
-      final dx = tapPosition.dx * (1 - targetScale);
-      final dy = tapPosition.dy * (1 - targetScale);
-      controller.value = Matrix4.identity()
-        ..translateByDouble(dx, dy, 0.0, 1.0)
-        ..scaleByDouble(targetScale, targetScale, 1.0, 1.0);
-      setState(() => _isZoomed = true);
-    }
+    final key = _zoomKeys[pageNo];
+    key?.currentState?.animateToggleZoom(details.localPosition);
   }
 
   @override
@@ -211,7 +197,7 @@ class _PageViewerScreenState extends ConsumerState<PageViewerScreen> {
               controller: _pageController,
               physics: _isZoomed
                   ? const NeverScrollableScrollPhysics()
-                  : null,
+                  : const BouncingScrollPhysics(),
               itemCount: widget.content.pageCount,
               onPageChanged: (page) {
                 _currentPage = page + 1;
@@ -221,7 +207,10 @@ class _PageViewerScreenState extends ConsumerState<PageViewerScreen> {
               },
               itemBuilder: (context, index) {
                 final pageNo = index + 1;
-                return _buildPage(pageNo);
+                return AnimatedPageWrapper(
+                  key: ValueKey('page_$pageNo'),
+                  child: _buildPage(pageNo),
+                );
               },
             ),
           ),
@@ -241,11 +230,25 @@ class _PageViewerScreenState extends ConsumerState<PageViewerScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(
-            'Page $_currentPage of $total',
-            style: const TextStyle(
-              color: AppTheme.textSecondary,
-              fontSize: 14,
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            transitionBuilder: (child, anim) => FadeTransition(
+              opacity: anim,
+              child: SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(0, 0.3),
+                  end: Offset.zero,
+                ).animate(anim),
+                child: child,
+              ),
+            ),
+            child: Text(
+              'Page $_currentPage of $total',
+              key: ValueKey(_currentPage),
+              style: const TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 14,
+              ),
             ),
           ),
           if (loading > 0) ...[
@@ -291,6 +294,7 @@ class _PageViewerScreenState extends ConsumerState<PageViewerScreen> {
   Widget _buildPage(int pageNo) {
     if (_loadedPages.containsKey(pageNo)) {
       return _ZoomablePage(
+        key: _getZoomKey(pageNo),
         bytes: _loadedPages[pageNo]!,
         controller: _getController(pageNo),
         onDoubleTap: (details) => _onDoubleTap(details, pageNo),
@@ -381,12 +385,83 @@ class _PageViewerScreenState extends ConsumerState<PageViewerScreen> {
   }
 }
 
+class AnimatedPageWrapper extends StatefulWidget {
+  final Widget child;
+
+  const AnimatedPageWrapper({super.key, required this.child});
+
+  @override
+  State<AnimatedPageWrapper> createState() => _AnimatedPageWrapperState();
+}
+
+class _AnimatedPageWrapperState extends State<AnimatedPageWrapper>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _fadeAnim;
+  late Animation<double> _scaleAnim;
+  late Animation<Offset> _slideAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 350),
+    );
+
+    _fadeAnim = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOut,
+    );
+
+    _scaleAnim = Tween<double>(begin: 0.92, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
+    );
+
+    _slideAnim = Tween<Offset>(
+      begin: const Offset(0.08, 0.0),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
+    );
+
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Opacity(
+          opacity: _fadeAnim.value,
+          child: Transform.translate(
+            offset: _slideAnim.value,
+            child: Transform.scale(
+              scale: _scaleAnim.value,
+              child: child,
+            ),
+          ),
+        );
+      },
+      child: widget.child,
+    );
+  }
+}
+
 class _ZoomablePage extends StatefulWidget {
   final Uint8List bytes;
   final TransformationController controller;
   final void Function(TapDownDetails) onDoubleTap;
 
   const _ZoomablePage({
+    super.key,
     required this.bytes,
     required this.controller,
     required this.onDoubleTap,
@@ -399,17 +474,17 @@ class _ZoomablePage extends StatefulWidget {
 class _ZoomablePageState extends State<_ZoomablePage>
     with SingleTickerProviderStateMixin {
   late AnimationController _animController;
-  Animation<Matrix4>? _animation;
+  Animation<Matrix4>? _matrixAnimation;
 
   @override
   void initState() {
     super.initState();
     _animController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 250),
+      duration: const Duration(milliseconds: 300),
     )..addListener(() {
-        if (_animation != null) {
-          widget.controller.value = _animation!.value;
+        if (_matrixAnimation != null) {
+          widget.controller.value = _matrixAnimation!.value;
         }
       });
   }
@@ -418,6 +493,58 @@ class _ZoomablePageState extends State<_ZoomablePage>
   void dispose() {
     _animController.dispose();
     super.dispose();
+  }
+
+  void animateToggleZoom(Offset tapPosition) {
+    final currentScale = widget.controller.value.getMaxScaleOnAxis();
+
+    if (currentScale > 1.1) {
+      animateResetZoom();
+    } else {
+      animateZoomTo(tapPosition, 2.5);
+    }
+  }
+
+  void animateZoomTo(Offset tapPosition, double targetScale) {
+    _animController.stop();
+
+    final currentTransform = widget.controller.value.clone();
+    final targetDx = tapPosition.dx * (1 - targetScale);
+    final targetDy = tapPosition.dy * (1 - targetScale);
+    final targetTransform = Matrix4.identity()
+      ..translateByDouble(targetDx, targetDy, 0.0, 1.0)
+      ..scaleByDouble(targetScale, targetScale, 1.0, 1.0);
+
+    _matrixAnimation = Matrix4Tween(
+      begin: currentTransform,
+      end: targetTransform,
+    ).animate(
+      CurvedAnimation(
+        parent: _animController,
+        curve: Curves.easeOutCubic,
+      ),
+    );
+
+    _animController.forward(from: 0.0);
+  }
+
+  void animateResetZoom() {
+    _animController.stop();
+
+    final currentTransform = widget.controller.value.clone();
+    final targetTransform = Matrix4.identity();
+
+    _matrixAnimation = Matrix4Tween(
+      begin: currentTransform,
+      end: targetTransform,
+    ).animate(
+      CurvedAnimation(
+        parent: _animController,
+        curve: Curves.easeOutCubic,
+      ),
+    );
+
+    _animController.forward(from: 0.0);
   }
 
   void _onDoubleTap(TapDownDetails details) {

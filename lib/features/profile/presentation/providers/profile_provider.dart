@@ -11,22 +11,26 @@ class ProfileState {
   final Map<String, dynamic>? profile;
   final List<Map<String, dynamic>> devices;
   final bool isLoading;
+  final String? error;
 
   const ProfileState({
     this.profile,
     this.devices = const [],
     this.isLoading = false,
+    this.error,
   });
 
   ProfileState copyWith({
     Map<String, dynamic>? profile,
     List<Map<String, dynamic>>? devices,
     bool? isLoading,
+    String? error,
   }) {
     return ProfileState(
       profile: profile ?? this.profile,
       devices: devices ?? this.devices,
       isLoading: isLoading ?? this.isLoading,
+      error: error,
     );
   }
 }
@@ -48,10 +52,23 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
     final user = _ref.read(supabaseClientProvider).auth.currentUser;
     if (user == null) return;
 
-    state = state.copyWith(isLoading: true);
-    final profile = await _repo.getProfile(user.id);
-    final devices = await _repo.getDevices(user.id);
-    state = ProfileState(profile: profile, devices: devices);
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final results = await Future.wait([
+        _repo.getProfile(user.id).timeout(const Duration(seconds: 5)),
+        _repo.getDevices(user.id).timeout(const Duration(seconds: 5)),
+      ]);
+
+      final profile = results[0] as Map<String, dynamic>?;
+      final devices = results[1] as List<Map<String, dynamic>>;
+
+      state = ProfileState(profile: profile, devices: devices);
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        error: e.toString(),
+      );
+    }
   }
 
   Future<void> updateProfile({
@@ -63,13 +80,20 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
     if (user == null) return;
 
     state = state.copyWith(isLoading: true);
-    await _repo.updateProfile(
-      userId: user.id,
-      name: name,
-      rollNo: rollNo,
-      phone: phone,
-    );
-    await _load();
+    try {
+      await _repo.updateProfile(
+        userId: user.id,
+        name: name,
+        rollNo: rollNo,
+        phone: phone,
+      );
+      await _load();
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        error: e.toString(),
+      );
+    }
   }
 
   void refresh() => _load();

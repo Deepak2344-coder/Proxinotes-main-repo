@@ -11,6 +11,7 @@ import 'features/auth/presentation/screens/login_screen.dart';
 import 'features/auth/presentation/screens/username_setup_screen.dart';
 import 'features/browse/presentation/screens/browse_screen.dart';
 import 'features/subscription/presentation/screens/subscription_screen.dart';
+import 'features/download/presentation/screens/downloads_screen.dart';
 import 'features/profile/presentation/screens/profile_screen.dart';
 import 'features/notices/presentation/providers/notice_provider.dart';
 import 'features/notices/presentation/widgets/notice_dialog.dart';
@@ -110,6 +111,7 @@ class _AppShellState extends ConsumerState<AppShell>
   final List<Widget> _pages = const [
     BrowseScreen(),
     SubscriptionScreen(),
+    DownloadsScreen(),
     ProfileScreen(),
   ];
 
@@ -200,6 +202,11 @@ class _AppShellState extends ConsumerState<AppShell>
             icon: Icon(Icons.subscriptions_outlined),
             activeIcon: Icon(Icons.subscriptions),
             label: 'Subscribe',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.download_outlined),
+            activeIcon: Icon(Icons.download),
+            label: 'Downloads',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.person_outline),
