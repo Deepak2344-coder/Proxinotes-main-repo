@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Notes Admin Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#f8fafc;--card:#fff;--border:#e2e8f0;--primary:#2563eb;--primary-hover:#1d4ed8;--danger:#dc2626;--danger-hover:#b91c1c;--success:#166534;--success-bg:#dcfce7;--warning:#d97706;--warning-bg:#fef3c7;--text:#0f172a;--text-secondary:#64748b;--input-bg:#f1f5f9;--radius:10px;--shadow:0 1px 3px rgba(0,0,0,.08)}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);line-height:1.5;min-height:100vh}
+.login-wrapper{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:1rem}
+.login-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:2.5rem;width:100%;max-width:400px;box-shadow:var(--shadow)}
+.login-card h1{font-size:1.5rem;font-weight:700;margin-bottom:.25rem}
+.login-card p{color:var(--text-secondary);font-size:.875rem;margin-bottom:1.5rem}
+.login-card input{width:100%;padding:.625rem .875rem;border:1px solid var(--border);border-radius:8px;font-size:.9375rem;background:var(--input-bg);outline:none;transition:border .15s}
+.login-card input:focus{border-color:var(--primary)}
+.login-card button{width:100%;padding:.625rem;margin-top:1rem;border:none;border-radius:8px;font-size:.9375rem;font-weight:600;cursor:pointer;transition:background .15s}
+.btn-primary{background:var(--primary);color:#fff}.btn-primary:hover{background:var(--primary-hover)}
+.btn-danger{background:var(--danger);color:#fff}.btn-danger:hover{background:var(--danger-hover)}
+.btn-danger-outline{background:transparent;color:var(--danger);border:1px solid var(--danger)}.btn-danger-outline:hover{background:#fef2f2}
+.btn-secondary{background:var(--input-bg);color:var(--text);border:1px solid var(--border)}.btn-secondary:hover{background:#e2e8f0}
+.btn-success{background:var(--success);color:#fff}.btn-success:hover{background:#15803d}
+.btn-warning{background:var(--warning);color:#fff}.btn-warning:hover{background:#b45309}
+.app{display:none;max-width:1200px;margin:0 auto;padding:1.5rem}
+.header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1.5rem}
+.header h1{font-size:1.5rem;font-weight:700}
+.header-actions{display:flex;gap:.5rem;flex-wrap:wrap}
+.tabs{display:flex;gap:0;margin-bottom:1.5rem;border-bottom:2px solid var(--border)}
+.tab{padding:.75rem 1.25rem;cursor:pointer;font-weight:600;color:var(--text-secondary);border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--primary);border-bottom-color:var(--primary)}
+.tab-content{display:none}
+.tab-content.active{display:block}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin-bottom:1.5rem}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;box-shadow:var(--shadow)}
+.stat-card .label{font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--text-secondary);font-weight:600}
+.stat-card .value{font-size:1.75rem;font-weight:700;margin-top:.25rem}
+.controls{display:flex;gap:.75rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem}
+.controls input,.controls select{padding:.5rem .75rem;border:1px solid var(--border);border-radius:8px;font-size:.875rem;background:var(--card);outline:none;min-width:0}
+.controls input:focus,.controls select:focus{border-color:var(--primary)}
+.controls input[type="text"]{min-width:220px}
+.table-wrap{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow)}
+.table-wrap table{width:100%;border-collapse:collapse;font-size:.875rem}
+.table-wrap th,.table-wrap td{padding:.75rem 1rem;text-align:left;border-bottom:1px solid var(--border)}
+.table-wrap th{background:var(--input-bg);font-weight:600;cursor:pointer;user-select:none;white-space:nowrap}
+.table-wrap th:hover{background:#e2e8f0}
+.table-wrap th .sort-icon{margin-left:.25rem;font-size:.7rem;color:var(--text-secondary)}
+.table-wrap tr:last-child td{border-bottom:none}
+.table-wrap tr:hover td{background:#f8fafc}
+.badge{display:inline-block;padding:.15rem .5rem;border-radius:999px;font-size:.75rem;font-weight:600;line-height:1.4}
+.badge-free{background:var(--success-bg);color:var(--success)}
+.badge-paid{background:#dbeafe;color:#1e40af}
+.badge-info{background:#e0f2fe;color:#0369a1}
+.badge-urgent{background:#fee2e2;color:#dc2626}
+.badge-update{background:var(--warning-bg);color:var(--warning)}
+.badge-active{background:var(--success-bg);color:var(--success)}
+.badge-inactive{background:var(--input-bg);color:var(--text-secondary)}
+.btn-sm{padding:.35rem .625rem;border:none;border-radius:6px;font-size:.8125rem;font-weight:600;cursor:pointer}
+.btn-icon{background:transparent;color:var(--danger);border:1px solid var(--border);padding:.35rem .5rem;border-radius:6px;cursor:pointer;font-size:.875rem;line-height:1}
+.btn-icon:hover{background:#fef2f2;border-color:var(--danger)}
+.btn-icon-edit{background:transparent;color:var(--primary);border:1px solid var(--border);padding:.35rem .5rem;border-radius:6px;cursor:pointer;font-size:.875rem;line-height:1}
+.btn-icon-edit:hover{background:#eff6ff;border-color:var(--primary)}
+.empty{text-align:center;padding:3rem 1rem;color:var(--text-secondary)}
+.empty p{margin-top:.5rem;font-size:.875rem}
+.modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;z-index:1000;padding:1rem;opacity:0;pointer-events:none;transition:opacity .2s}
+.modal-overlay.active{opacity:1;pointer-events:auto}
+.modal{background:var(--card);border-radius:var(--radius);padding:1.75rem;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2);transform:translateY(10px);transition:transform .2s}
+.modal-overlay.active .modal{transform:translateY(0)}
+.modal h2{font-size:1.25rem;font-weight:700;margin-bottom:1.25rem}
+.form-group{margin-bottom:1rem}
+.form-group label{display:block;font-size:.8125rem;font-weight:600;margin-bottom:.375rem}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:.5rem .75rem;border:1px solid var(--border);border-radius:8px;font-size:.875rem;background:var(--input-bg);outline:none}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--primary)}
+.form-group textarea{resize:vertical;min-height:80px;font-family:inherit}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.drop-zone{border:2px dashed var(--border);border-radius:8px;padding:2rem 1rem;text-align:center;cursor:pointer;transition:border .15s,background .15s;color:var(--text-secondary)}
+.drop-zone:hover,.drop-zone.dragover{border-color:var(--primary);background:#eff6ff}
+.drop-zone p{font-size:.875rem}
+.drop-zone .icon{font-size:2rem;margin-bottom:.5rem}
+.file-info{margin-top:.75rem;font-size:.8125rem;color:var(--text-secondary);text-align:left}
+.progress-bar-wrap{margin-top:1rem;display:none}
+.progress-bar-wrap.active{display:block}
+.progress-bar-track{height:6px;background:var(--input-bg);border-radius:999px;overflow:hidden}
+.progress-bar-fill{height:100%;background:var(--primary);border-radius:999px;transition:width .25s;width:0}
+.progress-text{font-size:.75rem;color:var(--text-secondary);margin-top:.375rem;text-align:center}
+.modal-actions{display:flex;gap:.5rem;justify-content:flex-end;margin-top:1.25rem}
+.toast{position:fixed;bottom:1.5rem;right:1.5rem;padding:.75rem 1.25rem;border-radius:8px;font-size:.875rem;font-weight:500;z-index:2000;transform:translateY(10px);opacity:0;transition:all .25s}
+.toast.show{transform:translateY(0);opacity:1}
+.toast-success{background:var(--success);color:#fff}
+.toast-error{background:var(--danger);color:#fff}
+.toggle{position:relative;display:inline-block;width:40px;height:22px}
+.toggle input{opacity:0;width:0;height:0}
+.toggle .slider{position:absolute;cursor:pointer;inset:0;background:var(--border);border-radius:22px;transition:.2s}
+.toggle .slider:before{position:absolute;content:"";height:16px;width:16px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.2s}
+.toggle input:checked+.slider{background:var(--success)}
+.toggle input:checked+.slider:before{transform:translateX(18px)}
+@media(max-width:640px){
+.header{flex-direction:column;align-items:flex-start}
+.controls input[type="text"]{min-width:0;width:100%}
+.table-wrap{overflow-x:auto}
+.stats{grid-template-columns:1fr}
+.form-row{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<div class="login-wrapper" id="loginScreen">
+  <div class="login-card">
+    <h1>Admin Dashboard</h1>
+    <p>Enter your admin token to continue.</p>
+    <input type="password" id="tokenInput" placeholder="Admin token" autocomplete="off">
+    <button class="btn-primary" onclick="login()">Sign In</button>
+  </div>
+</div>
+
+<div class="app" id="app">
+  <div class="header">
+    <h1>Notes Dashboard</h1>
+    <div class="header-actions">
+      <button class="btn-secondary btn-sm" onclick="loadAllData()">Refresh</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('content')">Content</div>
+    <div class="tab" onclick="switchTab('notices')">Notices</div>
+  </div>
+
+  <!-- CONTENT TAB -->
+  <div class="tab-content active" id="tab-content">
+    <div class="stats" id="statsCards">
+      <div class="stat-card"><div class="label">Total Items</div><div class="value" id="statItems">-</div></div>
+      <div class="stat-card"><div class="label">R2 Objects</div><div class="value" id="statObjects">-</div></div>
+      <div class="stat-card"><div class="label">Total Size</div><div class="value" id="statSize">-</div></div>
+    </div>
+
+    <div class="controls">
+      <input type="text" id="searchInput" placeholder="Search by subject..." oninput="renderContentTable()">
+      <select id="filterSelect" onchange="renderContentTable()">
+        <option value="all">All</option>
+        <option value="free">Free Preview</option>
+        <option value="paid">Paid Only</option>
+      </select>
+      <button class="btn-primary btn-sm" onclick="openUploadModal()">Upload</button>
+      <button class="btn-danger-outline btn-sm" onclick="deleteAll()">Delete All</button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th onclick="sortBy('subject')">Subject <span class="sort-icon" id="sort-subject"></span></th>
+            <th onclick="sortBy('chapter')">Chapter <span class="sort-icon" id="sort-chapter"></span></th>
+            <th onclick="sortBy('pages')">Pages <span class="sort-icon" id="sort-pages"></span></th>
+            <th onclick="sortBy('size')">Size <span class="sort-icon" id="sort-size"></span></th>
+            <th onclick="sortBy('isPreview')">Type <span class="sort-icon" id="sort-isPreview"></span></th>
+            <th onclick="sortBy('created_at')">Created <span class="sort-icon" id="sort-created_at"></span></th>
+            <th style="width:50px"></th>
+          </tr>
+        </thead>
+        <tbody id="contentTableBody"></tbody>
+      </table>
+      <div class="empty" id="contentEmpty" style="display:none">
+        <div style="font-size:2rem">&#128196;</div>
+        <p>No content found.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- NOTICES TAB -->
+  <div class="tab-content" id="tab-notices">
+    <div class="stats">
+      <div class="stat-card"><div class="label">Total Notices</div><div class="value" id="statNotices">-</div></div>
+      <div class="stat-card"><div class="label">Active</div><div class="value" id="statActiveNotices">-</div></div>
+      <div class="stat-card"><div class="label">Urgent</div><div class="value" id="statUrgentNotices">-</div></div>
+    </div>
+
+    <div class="controls">
+      <input type="text" id="noticeSearch" placeholder="Search notices..." oninput="renderNoticesTable()">
+      <select id="noticeTypeFilter" onchange="renderNoticesTable()">
+        <option value="all">All Types</option>
+        <option value="info">Info</option>
+        <option value="urgent">Urgent</option>
+        <option value="update">Update</option>
+      </select>
+      <select id="noticeStatusFilter" onchange="renderNoticesTable()">
+        <option value="all">All Status</option>
+        <option value="active">Active</option>
+        <option value="inactive">Inactive</option>
+      </select>
+      <button class="btn-primary btn-sm" onclick="openNoticeModal()">Create Notice</button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th>Type</th>
+            <th>Priority</th>
+            <th>Status</th>
+            <th>Starts</th>
+            <th>Expires</th>
+            <th style="width:100px">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="noticesTableBody"></tbody>
+      </table>
+      <div class="empty" id="noticesEmpty" style="display:none">
+        <div style="font-size:2rem">&#128276;</div>
+        <p>No notices found.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- UPLOAD MODAL -->
+<div class="modal-overlay" id="uploadModal">
+  <div class="modal">
+    <h2>Upload Content</h2>
+    <div class="form-group">
+      <label>Subject</label>
+      <input type="text" id="uploadSubject" placeholder="e.g. Mathematics">
+    </div>
+    <div class="form-group">
+      <label>Chapter Number</label>
+      <input type="number" id="uploadChapter" placeholder="e.g. 1" min="1">
+    </div>
+    <div class="form-group">
+      <label>Type</label>
+      <select id="uploadType">
+        <option value="paid">Paid</option>
+        <option value="free">Free Preview</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>PDF File</label>
+      <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+        <div class="icon">&#128196;</div>
+        <p>Drop PDF here or click to browse</p>
+      </div>
+      <input type="file" id="fileInput" accept=".pdf" style="display:none" onchange="handleFile(this.files)">
+      <div class="file-info" id="fileInfo" style="display:none"></div>
+    </div>
+    <div class="progress-bar-wrap" id="progressWrap">
+      <div class="progress-bar-track"><div class="progress-bar-fill" id="progressFill"></div></div>
+      <div class="progress-text" id="progressText">0%</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary btn-sm" onclick="closeUploadModal()">Cancel</button>
+      <button class="btn-primary btn-sm" id="uploadBtn" onclick="startUpload()">Upload</button>
+    </div>
+  </div>
+</div>
+
+<!-- NOTICE MODAL -->
+<div class="modal-overlay" id="noticeModal">
+  <div class="modal">
+    <h2 id="noticeModalTitle">Create Notice</h2>
+    <input type="hidden" id="noticeId">
+    <div class="form-row">
+      <div class="form-group">
+        <label>Type</label>
+        <select id="noticeType">
+          <option value="info">Info (dismissable banner)</option>
+          <option value="urgent">Urgent (blocking modal)</option>
+          <option value="update">Update (with link)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Priority</label>
+        <input type="number" id="noticePriority" value="0" min="0" max="100">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Title</label>
+      <input type="text" id="noticeTitle" placeholder="Notice title">
+    </div>
+    <div class="form-group">
+      <label>Body</label>
+      <textarea id="noticeBody" placeholder="Notice content..."></textarea>
+    </div>
+    <div class="form-group" id="noticeLinkGroup" style="display:none">
+      <label>Link URL</label>
+      <input type="url" id="noticeLinkUrl" placeholder="https://...">
+    </div>
+    <div class="form-group" id="noticeLinkLabelGroup" style="display:none">
+      <label>Link Button Label</label>
+      <input type="text" id="noticeLinkLabel" placeholder="e.g. Update Now">
+    </div>
+    <div class="form-group">
+      <label>Min App Version (optional, for forced updates)</label>
+      <input type="text" id="noticeMinVersion" placeholder="e.g. 1.2.0">
+    </div>
+    <div class="form-group">
+      <label>Max App Version (optional, hide after this version)</label>
+      <input type="text" id="noticeMaxVersion" placeholder="e.g. 2.0.0">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Starts At</label>
+        <input type="datetime-local" id="noticeStartsAt">
+      </div>
+      <div class="form-group">
+        <label>Expires At (optional)</label>
+        <input type="datetime-local" id="noticeExpiresAt">
+      </div>
+    </div>
+    <div class="form-group">
+      <label style="display:flex;align-items:center;gap:.5rem">
+        <input type="checkbox" id="noticeIsActive" checked> Active
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary btn-sm" onclick="closeNoticeModal()">Cancel</button>
+      <button class="btn-primary btn-sm" id="noticeSaveBtn" onclick="saveNotice()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+const API_BASE = 'https://qfjaccmwyyuldvtiysuy.supabase.co/functions/v1/admin-api';
+const SUPABASE_URL = 'https://qfjaccmwyyuldvtiysuy.supabase.co';
+const SUPABASE_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFmamFjY213eXl1bGR2dGl5c3V5Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MzgyNjExMCwiZXhwIjoyMDk5NDAyMTEwfQ.Nv5T6MD-8mbUFRh7w840fMPODTX3UjffCDkZsp7QEgg';
+let TOKEN = '';
+let allItems = [];
+let allNotices = [];
+let sortKey = 'created_at';
+let sortAsc = false;
+let selectedFile = null;
+
+function headers() { return { 'Authorization': 'Bearer ' + TOKEN, 'Content-Type': 'application/json' }; }
+function supabaseHeaders() { return { 'apikey': SUPABASE_SERVICE_KEY, 'Authorization': 'Bearer ' + SUPABASE_SERVICE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=representation' }; }
+
+function login() {
+  const t = document.getElementById('tokenInput').value.trim();
+  if (!t) return;
+  TOKEN = t;
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  loadAllData();
+}
+
+document.getElementById('tokenInput').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.tab[onclick="switchTab('${tab}')"]`).classList.add('active');
+  document.getElementById('tab-' + tab).classList.add('active');
+}
+
+async function loadAllData() {
+  await Promise.all([loadContentData(), loadNoticesData()]);
+}
+
+// --- CONTENT ---
+async function loadContentData() {
+  try {
+    const r = await fetch(API_BASE + '?action=list', { headers: headers() });
+    if (!r.ok) throw new Error('Failed to load');
+    const d = await r.json();
+    allItems = d.items || [];
+    document.getElementById('statItems').textContent = d.stats?.totalContent ?? allItems.length;
+    document.getElementById('statObjects').textContent = d.stats?.totalR2Objects ?? '-';
+    document.getElementById('statSize').textContent = formatSize(d.stats?.totalSize);
+    renderContentTable();
+  } catch (e) {
+    toast('Failed to load content: ' + e.message, 'error');
+  }
+}
+
+function renderContentTable() {
+  const search = document.getElementById('searchInput').value.toLowerCase();
+  const filter = document.getElementById('filterSelect').value;
+  let filtered = allItems.filter(i => {
+    if (search && !i.subject?.toLowerCase().includes(search)) return false;
+    if (filter === 'free' && !i.isPreview) return false;
+    if (filter === 'paid' && i.isPreview) return false;
+    return true;
+  });
+  filtered.sort((a, b) => {
+    let va = a[sortKey], vb = b[sortKey];
+    if (sortKey === 'size') { va = a.r2Size || 0; vb = b.r2Size || 0; }
+    if (typeof va === 'string') { va = va.toLowerCase(); vb = (vb || '').toLowerCase(); }
+    if (va < vb) return sortAsc ? -1 : 1;
+    if (va > vb) return sortAsc ? 1 : -1;
+    return 0;
+  });
+  const tbody = document.getElementById('contentTableBody');
+  const empty = document.getElementById('contentEmpty');
+  if (!filtered.length) {
+    tbody.innerHTML = '';
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+  tbody.innerHTML = filtered.map(i => {
+    const pages = i.r2Pages ?? 0;
+    const total = i.expectedPages ?? '?';
+    const size = formatSize(i.r2Size);
+    const badge = i.isPreview
+      ? '<span class="badge badge-free">Free</span>'
+      : '<span class="badge badge-paid">Paid</span>';
+    const date = i.created_at ? new Date(i.created_at).toLocaleDateString() : '-';
+    return `<tr>
+      <td style="font-weight:600">${esc(i.subject)}</td>
+      <td>${i.chapter ?? '-'}</td>
+      <td>${pages}/${total}</td>
+      <td>${size}</td>
+      <td>${badge}</td>
+      <td>${date}</td>
+      <td><button class="btn-icon" title="Delete" onclick="deleteItem('${esc(i.id)}')">&#128465;</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function sortBy(key) {
+  if (sortKey === key) sortAsc = !sortAsc;
+  else { sortKey = key; sortAsc = true; }
+  document.querySelectorAll('.sort-icon').forEach(s => s.textContent = '');
+  document.getElementById('sort-' + key).textContent = sortAsc ? '\u25B2' : '\u25BC';
+  renderContentTable();
+}
+
+async function deleteItem(id) {
+  if (!confirm('Delete this item? This cannot be undone.')) return;
+  try {
+    const r = await fetch(API_BASE + '?action=delete&content_id=' + encodeURIComponent(id), { method: 'DELETE', headers: headers() });
+    if (!r.ok) throw new Error('Delete failed');
+    toast('Item deleted', 'success');
+    loadContentData();
+  } catch (e) {
+    toast('Delete failed: ' + e.message, 'error');
+  }
+}
+
+async function deleteAll() {
+  if (!confirm('Are you sure you want to DELETE ALL content? This is irreversible.')) return;
+  if (!confirm('FINAL WARNING: This will permanently delete everything. Continue?')) return;
+  try {
+    const r = await fetch(API_BASE + '?action=delete-all', { method: 'DELETE', headers: headers() });
+    if (!r.ok) throw new Error('Delete all failed');
+    toast('All content deleted', 'success');
+    loadContentData();
+  } catch (e) {
+    toast('Delete all failed: ' + e.message, 'error');
+  }
+}
+
+function openUploadModal() {
+  document.getElementById('uploadSubject').value = '';
+  document.getElementById('uploadChapter').value = '';
+  document.getElementById('uploadType').value = 'paid';
+  selectedFile = null;
+  document.getElementById('fileInfo').style.display = 'none';
+  document.getElementById('fileInfo').textContent = '';
+  document.getElementById('progressWrap').classList.remove('active');
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('uploadBtn').disabled = false;
+  document.getElementById('uploadModal').classList.add('active');
+}
+
+function closeUploadModal() {
+  document.getElementById('uploadModal').classList.remove('active');
+  selectedFile = null;
+}
+
+document.getElementById('uploadModal').addEventListener('click', e => {
+  if (e.target === document.getElementById('uploadModal')) closeUploadModal();
+});
+
+const dropZone = document.getElementById('dropZone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  const files = e.dataTransfer.files;
+  if (files.length) handleFile(files);
+});
+
+function handleFile(files) {
+  const file = files[0];
+  if (!file || file.type !== 'application/pdf') {
+    toast('Please select a PDF file', 'error');
+    return;
+  }
+  selectedFile = file;
+  document.getElementById('fileInfo').style.display = '';
+  document.getElementById('fileInfo').textContent = file.name + ' (' + formatSize(file.size) + ')';
+}
+
+async function startUpload() {
+  const subject = document.getElementById('uploadSubject').value.trim();
+  const chapter = document.getElementById('uploadChapter').value.trim();
+  const isPreview = document.getElementById('uploadType').value === 'free';
+  if (!subject) { toast('Subject is required', 'error'); return; }
+  if (!chapter) { toast('Chapter number is required', 'error'); return; }
+  if (!selectedFile) { toast('Please select a PDF', 'error'); return; }
+
+  document.getElementById('uploadBtn').disabled = true;
+  document.getElementById('progressWrap').classList.add('active');
+  setProgress(0, 'Reading PDF...');
+
+  try {
+    const pages = await convertPdfToPages(selectedFile, (pct, msg) => setProgress(pct, msg));
+    setProgress(90, 'Uploading...');
+    const body = {
+      subject: subject,
+      chapter: parseInt(chapter),
+      isPreview: isPreview,
+      pages: pages
+    };
+    const r = await fetch(API_BASE + '?action=upload', { method: 'POST', headers: headers(), body: JSON.stringify(body) });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.error || 'Upload failed');
+    }
+    setProgress(100, 'Done!');
+    toast('Upload complete!', 'success');
+    closeUploadModal();
+    loadContentData();
+  } catch (e) {
+    toast('Upload failed: ' + e.message, 'error');
+    document.getElementById('uploadBtn').disabled = false;
+    document.getElementById('progressWrap').classList.remove('active');
+  }
+}
+
+async function convertPdfToPages(file, onProgress) {
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  const totalPages = pdf.numPages;
+  const pages = [];
+  for (let i = 1; i <= totalPages; i++) {
+    onProgress(Math.round((i / totalPages) * 80), `Converting page ${i}/${totalPages}...`);
+    const page = await pdf.getPage(i);
+    const vp = page.getViewport({ scale: 1.5 });
+    const canvas = document.createElement('canvas');
+    canvas.width = vp.width;
+    canvas.height = vp.height;
+    const ctx = canvas.getContext('2d');
+    await page.render({ canvasContext: ctx, viewport: vp }).promise;
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+    const base64 = dataUrl.split(',')[1];
+    const pad = String(i).padStart(3, '0');
+    const name = `page_${pad}.jpg`;
+    pages.push({ filename: name, data: base64 });
+  }
+  return pages;
+}
+
+function setProgress(pct, text) {
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressText').textContent = text || (pct + '%');
+}
+
+// --- NOTICES ---
+async function loadNoticesData() {
+  try {
+    const r = await fetch(SUPABASE_URL + '/rest/v1/notices?order=created_at.desc', {
+      headers: supabaseHeaders()
+    });
+    if (!r.ok) throw new Error('Failed to load notices');
+    allNotices = await r.json();
+    const active = allNotices.filter(n => n.is_active);
+    const urgent = allNotices.filter(n => n.type === 'urgent');
+    document.getElementById('statNotices').textContent = allNotices.length;
+    document.getElementById('statActiveNotices').textContent = active.length;
+    document.getElementById('statUrgentNotices').textContent = urgent.length;
+    renderNoticesTable();
+  } catch (e) {
+    toast('Failed to load notices: ' + e.message, 'error');
+  }
+}
+
+function renderNoticesTable() {
+  const search = document.getElementById('noticeSearch').value.toLowerCase();
+  const typeFilter = document.getElementById('noticeTypeFilter').value;
+  const statusFilter = document.getElementById('noticeStatusFilter').value;
+  let filtered = allNotices.filter(n => {
+    if (search && !n.title?.toLowerCase().includes(search) && !n.body?.toLowerCase().includes(search)) return false;
+    if (typeFilter !== 'all' && n.type !== typeFilter) return false;
+    if (statusFilter === 'active' && !n.is_active) return false;
+    if (statusFilter === 'inactive' && n.is_active) return false;
+    return true;
+  });
+  const tbody = document.getElementById('noticesTableBody');
+  const empty = document.getElementById('noticesEmpty');
+  if (!filtered.length) {
+    tbody.innerHTML = '';
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+  tbody.innerHTML = filtered.map(n => {
+    const typeBadge = `<span class="badge badge-${n.type}">${n.type}</span>`;
+    const statusBadge = n.is_active
+      ? '<span class="badge badge-active">Active</span>'
+      : '<span class="badge badge-inactive">Inactive</span>';
+    const starts = n.starts_at ? new Date(n.starts_at).toLocaleDateString() : '-';
+    const expires = n.expires_at ? new Date(n.expires_at).toLocaleDateString() : 'Never';
+    return `<tr>
+      <td style="font-weight:600">${esc(n.title)}</td>
+      <td>${typeBadge}</td>
+      <td>${n.priority ?? 0}</td>
+      <td>${statusBadge}</td>
+      <td>${starts}</td>
+      <td>${expires}</td>
+      <td style="white-space:nowrap">
+        <button class="btn-icon-edit" title="Edit" onclick="editNotice('${n.id}')">&#9998;</button>
+        <button class="btn-icon" title="Delete" onclick="deleteNotice('${n.id}')">&#128465;</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function openNoticeModal(notice) {
+  document.getElementById('noticeModalTitle').textContent = notice ? 'Edit Notice' : 'Create Notice';
+  document.getElementById('noticeId').value = notice?.id || '';
+  document.getElementById('noticeType').value = notice?.type || 'info';
+  document.getElementById('noticePriority').value = notice?.priority ?? 0;
+  document.getElementById('noticeTitle').value = notice?.title || '';
+  document.getElementById('noticeBody').value = notice?.body || '';
+  document.getElementById('noticeLinkUrl').value = notice?.link_url || '';
+  document.getElementById('noticeLinkLabel').value = notice?.link_label || '';
+  document.getElementById('noticeMinVersion').value = notice?.min_app_version || '';
+  document.getElementById('noticeMaxVersion').value = notice?.max_app_version || '';
+  document.getElementById('noticeIsActive').checked = notice?.is_active ?? true;
+
+  if (notice?.starts_at) {
+    const d = new Date(notice.starts_at);
+    document.getElementById('noticeStartsAt').value = d.toISOString().slice(0, 16);
+  } else {
+    const now = new Date();
+    document.getElementById('noticeStartsAt').value = now.toISOString().slice(0, 16);
+  }
+
+  if (notice?.expires_at) {
+    const d = new Date(notice.expires_at);
+    document.getElementById('noticeExpiresAt').value = d.toISOString().slice(0, 16);
+  } else {
+    document.getElementById('noticeExpiresAt').value = '';
+  }
+
+  toggleLinkFields();
+  document.getElementById('noticeModal').classList.add('active');
+}
+
+function closeNoticeModal() {
+  document.getElementById('noticeModal').classList.remove('active');
+}
+
+document.getElementById('noticeModal').addEventListener('click', e => {
+  if (e.target === document.getElementById('noticeModal')) closeNoticeModal();
+});
+
+document.getElementById('noticeType').addEventListener('change', toggleLinkFields);
+
+function toggleLinkFields() {
+  const type = document.getElementById('noticeType').value;
+  const show = type === 'update';
+  document.getElementById('noticeLinkGroup').style.display = show ? '' : 'none';
+  document.getElementById('noticeLinkLabelGroup').style.display = show ? '' : 'none';
+}
+
+function editNotice(id) {
+  const notice = allNotices.find(n => n.id === id);
+  if (notice) openNoticeModal(notice);
+}
+
+async function saveNotice() {
+  const id = document.getElementById('noticeId').value;
+  const type = document.getElementById('noticeType').value;
+  const title = document.getElementById('noticeTitle').value.trim();
+  const body = document.getElementById('noticeBody').value.trim();
+  const priority = parseInt(document.getElementById('noticePriority').value) || 0;
+  const isActive = document.getElementById('noticeIsActive').checked;
+  const linkUrl = document.getElementById('noticeLinkUrl').value.trim() || null;
+  const linkLabel = document.getElementById('noticeLinkLabel').value.trim() || null;
+  const minVersion = document.getElementById('noticeMinVersion').value.trim() || null;
+  const maxVersion = document.getElementById('noticeMaxVersion').value.trim() || null;
+  const startsAt = document.getElementById('noticeStartsAt').value;
+  const expiresAt = document.getElementById('noticeExpiresAt').value || null;
+
+  if (!title) { toast('Title is required', 'error'); return; }
+  if (!body) { toast('Body is required', 'error'); return; }
+  if (!startsAt) { toast('Start date is required', 'error'); return; }
+
+  const payload = {
+    type, title, body, priority, is_active: isActive,
+    link_url: linkUrl, link_label: linkLabel,
+    min_app_version: minVersion,
+    max_app_version: maxVersion,
+    starts_at: new Date(startsAt).toISOString(),
+    expires_at: expiresAt ? new Date(expiresAt).toISOString() : null
+  };
+
+  try {
+    let r;
+    if (id) {
+      r = await fetch(SUPABASE_URL + '/rest/v1/notices?id=eq.' + id, {
+        method: 'PATCH',
+        headers: supabaseHeaders(),
+        body: JSON.stringify(payload)
+      });
+    } else {
+      r = await fetch(SUPABASE_URL + '/rest/v1/notices', {
+        method: 'POST',
+        headers: supabaseHeaders(),
+        body: JSON.stringify(payload)
+      });
+    }
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.message || 'Save failed');
+    }
+    toast(id ? 'Notice updated' : 'Notice created', 'success');
+    closeNoticeModal();
+    loadNoticesData();
+  } catch (e) {
+    toast('Save failed: ' + e.message, 'error');
+  }
+}
+
+async function deleteNotice(id) {
+  if (!confirm('Delete this notice? This cannot be undone.')) return;
+  try {
+    const r = await fetch(SUPABASE_URL + '/rest/v1/notices?id=eq.' + id, {
+      method: 'DELETE',
+      headers: supabaseHeaders()
+    });
+    if (!r.ok) throw new Error('Delete failed');
+    toast('Notice deleted', 'success');
+    loadNoticesData();
+  } catch (e) {
+    toast('Delete failed: ' + e.message, 'error');
+  }
+}
+
+// --- UTILS ---
+function formatSize(bytes) {
+  if (!bytes || bytes === 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let i = 0;
+  let size = bytes;
+  while (size >= 1024 && i < units.length - 1) { size /= 1024; i++; }
+  return size.toFixed(i === 0 ? 0 : 1) + ' ' + units[i];
+}
+
+function esc(s) {
+  if (!s) return '';
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function toast(msg, type) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast toast-' + (type || 'success') + ' show';
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => el.classList.remove('show'), 3000);
+}
+</script>
+</body>
+</html>
