@@ -48,8 +48,12 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
   }
 
   Future<void> _load() async {
-    final sub = await _repo.getCurrentSubscription();
-    state = SubscriptionState(subscription: sub);
+    try {
+      final sub = await _repo.getCurrentSubscription();
+      state = SubscriptionState(subscription: sub);
+    } catch (e) {
+      state = const SubscriptionState();
+    }
   }
 
   Future<void> createSubscription(String planId) async {

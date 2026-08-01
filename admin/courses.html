@@ -1,0 +1,2038 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Course Manager — Notes Admin</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+:root {
+  --bg: #1e1e2e;
+  --bg-surface: #252536;
+  --bg-card: #2a2a3d;
+  --bg-card-hover: #333350;
+  --bg-sidebar: #1a1a2a;
+  --bg-header: #16162a;
+  --border: #3a3a52;
+  --text: #e0e0f0;
+  --text-muted: #8888aa;
+  --accent: #7c6ff7;
+  --accent-hover: #9b90fa;
+  --danger: #e74c6f;
+  --danger-hover: #f06292;
+  --success: #4caf50;
+  --warning: #ff9800;
+  --badge-price: #e74c6f;
+  --badge-type: #7c6ff7;
+  --badge-marks: #ff9800;
+  --radius: 8px;
+  --shadow: 0 2px 12px rgba(0,0,0,0.3);
+  --transition: 0.15s ease;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { height:100%; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background:var(--bg); color:var(--text); overflow:hidden; }
+
+/* Login Screen */
+#login-screen {
+  position:fixed; inset:0; z-index:9999;
+  display:flex; align-items:center; justify-content:center;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+}
+#login-screen .login-card {
+  background:var(--bg-surface); border:1px solid var(--border);
+  border-radius:16px; padding:48px 40px; width:400px; text-align:center;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.4);
+}
+#login-screen h1 { font-size:24px; margin-bottom:8px; color:var(--accent); }
+#login-screen p { color:var(--text-muted); margin-bottom:32px; font-size:14px; }
+#login-screen input {
+  width:100%; padding:12px 16px; border:1px solid var(--border);
+  border-radius:var(--radius); background:var(--bg); color:var(--text);
+  font-size:15px; outline:none; margin-bottom:16px; transition: border var(--transition);
+}
+#login-screen input:focus { border-color:var(--accent); }
+#login-screen input::placeholder { color:var(--text-muted); }
+#login-screen button {
+  width:100%; padding:12px; border:none; border-radius:var(--radius);
+  background:var(--accent); color:#fff; font-size:15px; font-weight:600;
+  cursor:pointer; transition: background var(--transition);
+}
+#login-screen button:hover { background:var(--accent-hover); }
+#login-screen .login-error { color:var(--danger); font-size:13px; margin-top:12px; min-height:20px; }
+
+/* App Layout */
+#app { display:none; height:100vh; flex-direction:column; }
+#app.active { display:flex; }
+
+/* Header */
+#header {
+  display:flex; align-items:center; gap:12px;
+  padding:10px 20px; background:var(--bg-header);
+  border-bottom:1px solid var(--border); min-height:52px; flex-shrink:0;
+}
+#header .back-link {
+  color:var(--text-muted); text-decoration:none; font-size:13px;
+  transition: color var(--transition); white-space:nowrap;
+}
+#header .back-link:hover { color:var(--accent); }
+#header h1 { font-size:18px; font-weight:600; white-space:nowrap; }
+#header .spacer { flex:1; }
+#header button {
+  padding:6px 14px; border:1px solid var(--border); border-radius:var(--radius);
+  background:var(--bg-card); color:var(--text); font-size:13px;
+  cursor:pointer; transition: all var(--transition); white-space:nowrap;
+}
+#header button:hover { background:var(--bg-card-hover); border-color:var(--accent); }
+
+/* Body */
+#body { display:flex; flex:1; overflow:hidden; }
+
+/* Sidebar */
+#sidebar {
+  width:240px; min-width:240px; background:var(--bg-sidebar);
+  border-right:1px solid var(--border); overflow-y:auto; flex-shrink:0;
+  padding:12px 0;
+}
+#sidebar::-webkit-scrollbar { width:6px; }
+#sidebar::-webkit-scrollbar-track { background:transparent; }
+#sidebar::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+.tree-item {
+  display:flex; align-items:center; gap:6px;
+  padding:6px 16px; cursor:pointer; font-size:13px;
+  transition: background var(--transition); user-select:none;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.tree-item:hover { background:rgba(124,111,247,0.1); }
+.tree-item.active { background:rgba(124,111,247,0.2); color:var(--accent); font-weight:600; }
+.tree-item .tree-icon { flex-shrink:0; width:18px; text-align:center; }
+.tree-item .tree-chevron { flex-shrink:0; width:14px; text-align:center; font-size:10px; color:var(--text-muted); transition:transform 0.2s; }
+.tree-item .tree-chevron.open { transform:rotate(90deg); }
+.tree-children { display:none; }
+.tree-children.open { display:block; }
+.tree-item.depth-1 { padding-left:32px; }
+.tree-item.depth-2 { padding-left:48px; }
+.tree-divider { height:1px; background:var(--border); margin:8px 16px; }
+.tree-label { padding:8px 16px 4px; font-size:11px; text-transform:uppercase; color:var(--text-muted); letter-spacing:0.5px; font-weight:600; }
+
+/* Main Content */
+#main { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+
+/* Breadcrumb */
+#breadcrumb-bar {
+  display:flex; align-items:center; gap:4px;
+  padding:8px 20px; background:var(--bg-surface);
+  border-bottom:1px solid var(--border); min-height:38px; flex-shrink:0;
+  overflow-x:auto; white-space:nowrap;
+}
+#breadcrumb-bar::-webkit-scrollbar { display:none; }
+.breadcrumb-seg {
+  color:var(--text-muted); font-size:13px; cursor:pointer;
+  transition:color var(--transition); padding:2px 4px; border-radius:4px;
+}
+.breadcrumb-seg:hover { color:var(--accent); background:rgba(124,111,247,0.1); }
+.breadcrumb-seg:last-child { color:var(--text); cursor:default; font-weight:600; }
+.breadcrumb-seg:last-child:hover { background:transparent; }
+.breadcrumb-sep { color:var(--text-muted); font-size:12px; }
+
+/* Grid Area */
+#grid-area {
+  flex:1; overflow-y:auto; padding:20px;
+}
+#grid-area::-webkit-scrollbar { width:8px; }
+#grid-area::-webkit-scrollbar-track { background:transparent; }
+#grid-area::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
+
+.grid {
+  display:grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap:12px;
+}
+.grid-card {
+  background:var(--bg-card); border:1px solid var(--border);
+  border-radius:var(--radius); padding:16px; cursor:pointer;
+  transition: all var(--transition); display:flex; flex-direction:column;
+  align-items:center; text-align:center; min-height:120px; justify-content:center;
+  position:relative; user-select:none;
+}
+.grid-card:hover { background:var(--bg-card-hover); border-color:var(--accent); transform:translateY(-2px); box-shadow:var(--shadow); }
+.grid-card.selected { border-color:var(--accent); background:rgba(124,111,247,0.15); }
+.grid-card .card-icon { font-size:36px; margin-bottom:8px; }
+.grid-card .card-name { font-size:13px; font-weight:500; word-break:break-word; line-height:1.3; max-height:2.6em; overflow:hidden; }
+.grid-card .card-meta { font-size:11px; color:var(--text-muted); margin-top:4px; }
+.grid-card .card-badge {
+  position:absolute; top:8px; right:8px;
+  font-size:10px; padding:2px 6px; border-radius:10px;
+  font-weight:600; color:#fff;
+}
+.badge-price { background:var(--badge-price); }
+.badge-type { background:var(--badge-type); }
+.badge-marks { background:var(--badge-marks); }
+
+/* Empty State */
+.empty-state {
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  padding:60px 20px; color:var(--text-muted); text-align:center;
+}
+.empty-state .empty-icon { font-size:48px; margin-bottom:12px; opacity:0.5; }
+.empty-state p { font-size:14px; }
+
+/* Context Menu */
+#context-menu {
+  position:fixed; z-index:5000; display:none;
+  background:var(--bg-surface); border:1px solid var(--border);
+  border-radius:var(--radius); padding:4px; min-width:180px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+#context-menu.visible { display:block; }
+.ctx-item {
+  padding:8px 12px; font-size:13px; cursor:pointer;
+  border-radius:4px; transition: background var(--transition);
+  display:flex; align-items:center; gap:8px;
+}
+.ctx-item:hover { background:rgba(124,111,247,0.15); }
+.ctx-item.danger { color:var(--danger); }
+.ctx-item.danger:hover { background:rgba(231,76,111,0.15); }
+.ctx-sep { height:1px; background:var(--border); margin:4px 8px; }
+
+/* Modal Overlay */
+.modal-overlay {
+  position:fixed; inset:0; z-index:4000;
+  background:rgba(0,0,0,0.6); display:none;
+  align-items:center; justify-content:center;
+  backdrop-filter:blur(4px);
+}
+.modal-overlay.visible { display:flex; }
+.modal {
+  background:var(--bg-surface); border:1px solid var(--border);
+  border-radius:12px; padding:28px; width:480px; max-width:90vw;
+  max-height:85vh; overflow-y:auto; box-shadow: 0 12px 48px rgba(0,0,0,0.5);
+}
+.modal::-webkit-scrollbar { width:6px; }
+.modal::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+.modal h2 { font-size:18px; margin-bottom:20px; }
+.modal label { display:block; font-size:13px; color:var(--text-muted); margin-bottom:6px; margin-top:14px; }
+.modal label:first-of-type { margin-top:0; }
+.modal input, .modal textarea, .modal select {
+  width:100%; padding:10px 12px; border:1px solid var(--border);
+  border-radius:var(--radius); background:var(--bg); color:var(--text);
+  font-size:14px; outline:none; transition: border var(--transition);
+  font-family:inherit;
+}
+.modal input:focus, .modal textarea:focus, .modal select:focus { border-color:var(--accent); }
+.modal textarea { resize:vertical; min-height:80px; }
+.modal select { cursor:pointer; }
+.modal select option { background:var(--bg); color:var(--text); }
+.modal-actions { display:flex; gap:10px; margin-top:24px; justify-content:flex-end; }
+.btn {
+  padding:8px 20px; border:none; border-radius:var(--radius);
+  font-size:14px; font-weight:500; cursor:pointer;
+  transition: all var(--transition);
+}
+.btn-primary { background:var(--accent); color:#fff; }
+.btn-primary:hover { background:var(--accent-hover); }
+.btn-danger { background:var(--danger); color:#fff; }
+.btn-danger:hover { background:var(--danger-hover); }
+.btn-ghost { background:transparent; color:var(--text-muted); border:1px solid var(--border); }
+.btn-ghost:hover { background:var(--bg-card); color:var(--text); }
+
+/* MCQ Options */
+.option-row { display:flex; gap:8px; margin-bottom:8px; align-items:center; }
+.option-row input { flex:1; }
+.option-row button {
+  width:32px; height:32px; border:none; border-radius:var(--radius);
+  background:var(--danger); color:#fff; cursor:pointer; font-size:16px;
+  display:flex; align-items:center; justify-content:center;
+  transition:background var(--transition); flex-shrink:0;
+}
+.option-row button:hover { background:var(--danger-hover); }
+.add-option-btn {
+  padding:6px 12px; border:1px dashed var(--border); border-radius:var(--radius);
+  background:transparent; color:var(--text-muted); cursor:pointer;
+  font-size:13px; transition:all var(--transition); margin-top:4px;
+}
+.add-option-btn:hover { border-color:var(--accent); color:var(--accent); }
+
+/* Toggle Switch */
+.toggle-wrap { display:flex; align-items:center; gap:10px; margin-top:6px; }
+.toggle {
+  width:44px; height:24px; border-radius:12px; background:var(--border);
+  position:relative; cursor:pointer; transition:background var(--transition);
+}
+.toggle.on { background:var(--accent); }
+.toggle::after {
+  content:''; position:absolute; top:3px; left:3px;
+  width:18px; height:18px; border-radius:50%; background:#fff;
+  transition:transform var(--transition);
+}
+.toggle.on::after { transform:translateX(20px); }
+.toggle-label { font-size:13px; color:var(--text-muted); }
+
+/* Drop Zone */
+.drop-zone {
+  border:2px dashed var(--border); border-radius:var(--radius);
+  padding:32px; text-align:center; cursor:pointer;
+  transition:all var(--transition); margin-top:6px;
+}
+.drop-zone:hover, .drop-zone.dragover { border-color:var(--accent); background:rgba(124,111,247,0.08); }
+.drop-zone p { color:var(--text-muted); font-size:13px; }
+.drop-zone .dz-icon { font-size:32px; margin-bottom:8px; }
+.drop-zone .dz-file { color:var(--accent); font-weight:600; margin-top:8px; }
+
+/* Progress Bar */
+.progress-wrap { margin-top:12px; display:none; }
+.progress-bar-bg {
+  width:100%; height:8px; background:var(--border); border-radius:4px; overflow:hidden;
+}
+.progress-bar-fill {
+  height:100%; background:var(--accent); border-radius:4px;
+  transition:width 0.3s ease; width:0%;
+}
+.progress-text { font-size:12px; color:var(--text-muted); margin-top:4px; text-align:center; }
+
+/* Toast */
+#toast-container {
+  position:fixed; bottom:20px; right:20px; z-index:9000;
+  display:flex; flex-direction:column-reverse; gap:8px;
+}
+.toast {
+  padding:12px 20px; border-radius:var(--radius); font-size:13px;
+  color:#fff; box-shadow:var(--shadow); animation:toastIn 0.3s ease;
+  max-width:360px;
+}
+.toast.success { background:var(--success); }
+.toast.error { background:var(--danger); }
+.toast.info { background:var(--accent); }
+@keyframes toastIn { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+
+/* Scrollbar global */
+::-webkit-scrollbar { width:8px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
+</style>
+</head>
+<body>
+
+<!-- Login Screen -->
+<div id="login-screen">
+  <div class="login-card">
+    <h1>Course Manager</h1>
+    <p>Enter your admin token to continue</p>
+    <input type="password" id="login-token" placeholder="Admin token..." autofocus>
+    <button onclick="doLogin()">Sign In</button>
+    <div class="login-error" id="login-error"></div>
+  </div>
+</div>
+
+<!-- App -->
+<div id="app">
+  <!-- Header -->
+  <div id="header">
+    <a href="index.html" class="back-link">← Back to Dashboard</a>
+    <h1>Course Manager</h1>
+    <span class="spacer"></span>
+    <button onclick="refreshAll()">↻ Refresh</button>
+  </div>
+
+  <!-- Body -->
+  <div id="body">
+    <!-- Sidebar -->
+    <div id="sidebar">
+      <div class="tree-label">Courses</div>
+      <div id="tree-root"></div>
+    </div>
+
+    <!-- Main -->
+    <div id="main">
+      <div id="breadcrumb-bar"></div>
+      <div id="grid-area"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Context Menu -->
+<div id="context-menu"></div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal" id="modal-content"></div>
+</div>
+
+<!-- Toasts -->
+<div id="toast-container"></div>
+
+<script>
+const SB_URL = 'https://qfjaccmwyyuldvtiysuy.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFmamFjY213eXl1bGR2dGl5c3V5Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MzgyNjExMCwiZXhwIjoyMDk5NDAyMTEwfQ.Nv5T6MD-8mbUFRh7w840fMPODTX3UjffCDkZsp7QEgg';
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+let token = sessionStorage.getItem('admin_token') || '';
+let courses = [];
+let subjects = [];
+let units = [];
+let files = [];
+let questions = [];
+let currentPath = []; // [{type:'desktop'|'course'|'subject'|'unit'|'virtual', id, name, meta}]
+let selectedCard = null;
+
+// ─── Auth ────────────────────────────────────────────
+function doLogin() {
+  const t = document.getElementById('login-token').value.trim();
+  if (!t) { document.getElementById('login-error').textContent = 'Please enter a token'; return; }
+  token = t;
+  sessionStorage.setItem('admin_token', token);
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').classList.add('active');
+  initApp();
+}
+
+document.getElementById('login-token').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+
+async function initApp() {
+  await loadSidebar();
+  navigateToDesktop();
+}
+
+if (token) {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').classList.add('active');
+  initApp();
+}
+
+// ─── Supabase Helpers ────────────────────────────────
+function sbHeaders() {
+  return {
+    'apikey': SB_KEY,
+    'Authorization': 'Bearer ' + SB_KEY,
+    'Content-Type': 'application/json',
+    'Prefer': 'return=representation'
+  };
+}
+
+async function sbGet(table, select='*', params='') {
+  let url = `${SB_URL}/rest/v1/${table}?select=${select}${params ? '&' + params : ''}`;
+  const r = await fetch(url, { headers: sbHeaders() });
+  const data = await r.json();
+  if (!r.ok) { console.error('sbGet error:', data); return []; }
+  return Array.isArray(data) ? data : [];
+}
+
+async function sbPost(table, body) {
+  const r = await fetch(`${SB_URL}/rest/v1/${table}`, {
+    method: 'POST', headers: sbHeaders(), body: JSON.stringify(body)
+  });
+  const data = await r.json();
+  if (!r.ok) return { error: data };
+  return data;
+}
+
+async function sbPatch(table, id, body) {
+  const r = await fetch(`${SB_URL}/rest/v1/${table}?id=eq.${id}`, {
+    method: 'PATCH', headers: sbHeaders(), body: JSON.stringify(body)
+  });
+  const data = await r.json();
+  if (!r.ok) return { error: data };
+  return data;
+}
+
+async function sbDelete(table, id) {
+  const r = await fetch(`${SB_URL}/rest/v1/${table}?id=eq.${id}`, {
+    method: 'DELETE', headers: sbHeaders()
+  });
+  if (!r.ok) { const d = await r.json(); return { error: d }; }
+  return { ok: true };
+}
+
+// ─── Sidebar ─────────────────────────────────────────
+async function loadSidebar() {
+  try {
+    courses = await sbGet('courses', '*', 'order=name.asc');
+    subjects = await sbGet('subjects', '*', 'order=order_index.asc');
+    units = await sbGet('units', '*', 'order=order_index.asc');
+  } catch(e) {
+    console.error('loadSidebar error:', e);
+  }
+  try {
+    files = await sbGet('files', '*', 'file_type=eq.uploaded');
+  } catch(e) {
+    files = [];
+  }
+  renderTree();
+}
+
+function renderTree() {
+  const root = document.getElementById('tree-root');
+  root.innerHTML = '';
+  courses.forEach(c => {
+    const cSubjects = subjects.filter(s => s.course_id === c.id);
+    const div = document.createElement('div');
+
+    const item = document.createElement('div');
+    item.className = 'tree-item';
+    item.innerHTML = `<span class="tree-chevron${cSubjects.length ? '' : ''}">▶</span><span class="tree-icon">📁</span><span>${esc(c.name)}</span>`;
+    item.onclick = () => navigateToCourse(c.id);
+    div.appendChild(item);
+
+    if (cSubjects.length) {
+      const ch = document.createElement('div');
+      ch.className = 'tree-children';
+      cSubjects.forEach(s => {
+        const sItem = document.createElement('div');
+        sItem.className = 'tree-item depth-1';
+        sItem.innerHTML = `<span class="tree-icon">📂</span><span>${esc(s.name)}</span>`;
+        sItem.onclick = (e) => { e.stopPropagation(); navigateToSubject(c.id, s.id, s.name, c.name); };
+        ch.appendChild(sItem);
+      });
+      div.appendChild(ch);
+      item.onclick = (e) => {
+        e.stopPropagation();
+        const chev = item.querySelector('.tree-chevron');
+        const isOpen = ch.classList.toggle('open');
+        chev.classList.toggle('open', isOpen);
+        navigateToCourse(c.id);
+      };
+    }
+    root.appendChild(div);
+  });
+  updateTreeActive();
+}
+
+function updateTreeActive() {
+  document.querySelectorAll('.tree-item').forEach(el => el.classList.remove('active'));
+  const cur = currentPath[currentPath.length - 1];
+  if (!cur) return;
+  if (cur.type === 'course') {
+    const idx = courses.findIndex(c => c.id === cur.id);
+    const items = document.querySelectorAll('#tree-root > div');
+    if (items[idx]) items[idx].querySelector('.tree-item')?.classList.add('active');
+  }
+}
+
+// ─── Navigation ──────────────────────────────────────
+function navigateToDesktop() {
+  currentPath = [{ type: 'desktop', id: null, name: 'Desktop' }];
+  selectedCard = null;
+  renderBreadcrumb();
+  renderGrid();
+}
+
+function navigateToCourse(courseId) {
+  const c = courses.find(x => x.id === courseId);
+  if (!c) return;
+  currentPath = [
+    { type: 'desktop', id: null, name: 'Desktop' },
+    { type: 'course', id: c.id, name: c.name }
+  ];
+  selectedCard = null;
+  renderBreadcrumb();
+  renderGrid();
+  updateTreeActive();
+}
+
+function navigateToSubject(courseId, subjectId, subjectName, courseName) {
+  const c = courses.find(x => x.id === courseId);
+  currentPath = [
+    { type: 'desktop', id: null, name: 'Desktop' },
+    { type: 'course', id: courseId, name: c ? c.name : courseName },
+    { type: 'subject', id: subjectId, name: subjectName }
+  ];
+  selectedCard = null;
+  renderBreadcrumb();
+  renderGrid();
+  updateTreeActive();
+}
+
+function navigateToUnit(courseId, subjectId, unitId, unitName) {
+  const c = courses.find(x => x.id === courseId);
+  const s = subjects.find(x => x.id === subjectId);
+  currentPath = [
+    { type: 'desktop', id: null, name: 'Desktop' },
+    { type: 'course', id: courseId, name: c ? c.name : '' },
+    { type: 'subject', id: subjectId, name: s ? s.name : '' },
+    { type: 'unit', id: unitId, name: unitName }
+  ];
+  selectedCard = null;
+  renderBreadcrumb();
+  renderGrid();
+}
+
+function navigateToVirtual(courseId, subjectId, virtualType) {
+  const c = courses.find(x => x.id === courseId);
+  const s = subjects.find(x => x.id === subjectId);
+  const labels = { tests: 'Tests', assignments: 'Assignments', materials: 'Study Materials' };
+  currentPath = [
+    { type: 'desktop', id: null, name: 'Desktop' },
+    { type: 'course', id: courseId, name: c ? c.name : '' },
+  ];
+  if (subjectId && s) {
+    currentPath.push({ type: 'subject', id: subjectId, name: s.name });
+  }
+  currentPath.push({ type: 'virtual', id: virtualType, name: labels[virtualType] || virtualType });
+  selectedCard = null;
+  renderBreadcrumb();
+  renderGrid();
+}
+
+function navigateToQuestionBank(courseId) {
+  const c = courses.find(x => x.id === courseId);
+  currentPath = [
+    { type: 'desktop', id: null, name: 'Desktop' },
+    { type: 'course', id: courseId, name: c ? c.name : '' },
+    { type: 'virtual', id: 'question_bank', name: 'Question Bank' }
+  ];
+  selectedCard = null;
+  renderBreadcrumb();
+  renderGrid();
+}
+
+function navigateToUploadedFiles() {
+  currentPath = [
+    { type: 'desktop', id: null, name: 'Desktop' },
+    { type: 'virtual', id: 'uploaded_files', name: 'Uploaded Files' }
+  ];
+  selectedCard = null;
+  renderBreadcrumb();
+  renderGrid();
+}
+
+function navigateToUnits(subjectId, courseId) {
+  const c = courses.find(x => x.id === courseId);
+  const s = subjects.find(x => x.id === subjectId);
+  currentPath = [
+    { type: 'desktop', id: null, name: 'Desktop' },
+    { type: 'course', id: courseId, name: c ? c.name : '' },
+    { type: 'subject', id: subjectId, name: s ? s.name : '' },
+    { type: 'units_list', id: subjectId, name: 'Units' }
+  ];
+  selectedCard = null;
+  renderBreadcrumb();
+  renderGrid();
+}
+
+function navigateToUnit(unitId, subjectId, unitName) {
+  const courseId = currentPath[1] && currentPath[1].id;
+  const c = courses.find(x => x.id === courseId);
+  const s = subjects.find(x => x.id === subjectId);
+  currentPath = [
+    { type: 'desktop', id: null, name: 'Desktop' },
+    { type: 'course', id: courseId, name: c ? c.name : '' },
+    { type: 'subject', id: subjectId, name: s ? s.name : '' },
+    { type: 'unit', id: unitId, name: unitName }
+  ];
+  selectedCard = null;
+  renderBreadcrumb();
+  renderGrid();
+}
+
+function navigateToVirtualAssessments(unitId) {
+  currentPath.push({ type: 'virtual', id: 'unit_assessments', name: 'Assessments' });
+  selectedCard = null;
+  renderBreadcrumb();
+  renderGrid();
+}
+
+function navigateToVirtualChapters(unitId) {
+  currentPath.push({ type: 'virtual', id: 'unit_chapters', name: 'Chapters' });
+  selectedCard = null;
+  renderBreadcrumb();
+  renderGrid();
+}
+
+function navigateFromBreadcrumb(idx) {
+  currentPath = currentPath.slice(0, idx + 1);
+  selectedCard = null;
+  renderBreadcrumb();
+  renderGrid();
+  updateTreeActive();
+}
+
+// ─── Breadcrumb ──────────────────────────────────────
+function renderBreadcrumb() {
+  const bar = document.getElementById('breadcrumb-bar');
+  bar.innerHTML = '';
+  currentPath.forEach((seg, i) => {
+    if (i > 0) {
+      const sep = document.createElement('span');
+      sep.className = 'breadcrumb-sep';
+      sep.textContent = '›';
+      bar.appendChild(sep);
+    }
+    const s = document.createElement('span');
+    s.className = 'breadcrumb-seg';
+    s.textContent = seg.name;
+    if (i < currentPath.length - 1) {
+      s.onclick = () => navigateFromBreadcrumb(i);
+    }
+    bar.appendChild(s);
+  });
+}
+
+// ─── Grid Rendering ──────────────────────────────────
+async function renderGrid() {
+  const area = document.getElementById('grid-area');
+  const loc = currentPath[currentPath.length - 1];
+  if (!loc) { area.innerHTML = ''; return; }
+
+  switch(loc.type) {
+    case 'desktop': return renderDesktopGrid(area);
+    case 'course': return renderCourseGrid(area, loc.id);
+    case 'subject': return renderSubjectGrid(area, loc.id);
+    case 'units_list': return renderUnitsListGrid(area, loc.id);
+    case 'unit': return renderUnitGrid(area, loc.id);
+    case 'virtual': return renderVirtualGrid(area, loc);
+  }
+}
+
+function renderDesktopGrid(area) {
+  // Fetch uploaded files count
+  const uploadedCount = (files || []).filter(f => !f.course_id && !f.subject_id && !f.unit_id && f.file_type === 'uploaded').length;
+
+  let html = '<div class="grid">';
+
+  // Uploaded Files staging folder
+  html += `<div class="grid-card" data-type="virtual" data-id="uploaded_files"
+    onclick="navigateToUploadedFiles()"
+    oncontextmenu="showCtx(event,'uploaded_files')">
+    <div class="card-icon">📥</div>
+    <div class="card-name">Uploaded Files</div>
+    <div class="card-meta">${uploadedCount} file${uploadedCount!==1?'s':''}</div>
+  </div>`;
+
+  if (!courses.length) {
+    html += '</div>';
+    area.innerHTML = `<div class="empty-state"><div class="empty-icon">📚</div><p>No courses yet. Right-click to create one.</p></div>`;
+    return;
+  }
+  courses.forEach(c => {
+    const subCount = subjects.filter(s => s.course_id === c.id).length;
+    html += `<div class="grid-card" data-type="course" data-id="${c.id}"
+      onclick="navigateToCourse('${c.id}')"
+      oncontextmenu="showCtx(event,'course','${c.id}')">
+      <div class="card-icon">📁</div>
+      <div class="card-name">${esc(c.name)}</div>
+      <div class="card-meta">${subCount} subject${subCount!==1?'s':''}</div>
+      ${c.price ? `<div class="card-badge badge-price">₹${esc(String(c.price))}</div>` : ''}
+    </div>`;
+  });
+  html += '</div>';
+  area.innerHTML = html;
+}
+
+async function renderCourseGrid(area, courseId) {
+  const courseSubs = subjects.filter(s => s.course_id === courseId);
+
+  let html = '<div class="grid">';
+
+  // Subjects only — no Tests/QB at course level
+  courseSubs.forEach(s => {
+    html += `<div class="grid-card" data-type="subject" data-id="${s.id}"
+      onclick="navigateToSubject('${courseId}','${s.id}','${esc(s.name)}','')"
+      oncontextmenu="showCtx(event,'subject','${s.id}','${courseId}')">
+      <div class="card-icon">📂</div>
+      <div class="card-name">${esc(s.name)}</div>
+      <div class="card-meta">Order: ${s.order_index}</div>
+    </div>`;
+  });
+
+  html += '</div>';
+  area.innerHTML = html;
+}
+
+async function renderSubjectGrid(area, subjectId) {
+  const subUnits = units.filter(u => u.subject_id === subjectId);
+  const subFiles = files.filter(f => f.subject_id === subjectId);
+  const testCount = subFiles.filter(f => f.file_type === 'test_pdf').length;
+
+  let html = '<div class="grid">';
+
+  // Units folder — clickable
+  html += `<div class="grid-card" data-type="units_folder"
+    onclick="navigateToUnits('${subjectId}','${currentPath[1].id}')"
+    oncontextmenu="showCtx(event,'units_folder','${subjectId}','${currentPath[1].id}')">
+    <div class="card-icon">📂</div>
+    <div class="card-name">Units</div>
+    <div class="card-meta">${subUnits.length} unit${subUnits.length!==1?'s':''}</div>
+  </div>`;
+
+  // Tests — only at subject level
+  html += `<div class="grid-card" data-type="virtual"
+    onclick="navigateToVirtual('${currentPath[1].id}','${subjectId}','tests')"
+    oncontextmenu="showCtx(event,'virtual_tests','${subjectId}','${currentPath[1].id}')">
+    <div class="card-icon">📂</div>
+    <div class="card-name">Tests</div>
+    <div class="card-meta">${testCount} file${testCount!==1?'s':''}</div>
+  </div>`;
+
+  html += '</div>';
+  area.innerHTML = html;
+}
+
+async function renderUnitsListGrid(area, subjectId) {
+  const subUnits = units.filter(u => u.subject_id === subjectId);
+
+  if (!subUnits.length) {
+    area.innerHTML = `<div class="empty-state"><div class="empty-icon">📂</div><p>No units yet. Right-click to create one.</p></div>`;
+    return;
+  }
+
+  let html = '<div class="grid">';
+  subUnits.forEach(u => {
+    const unitFiles = files.filter(f => f.unit_id === u.id);
+    const assessCount = unitFiles.filter(f => f.file_type === 'test_pdf' || f.file_type === 'assignment_pdf').length;
+    const chCount = unitFiles.filter(f => f.file_type === 'study_material').length;
+    html += `<div class="grid-card" data-type="unit" data-id="${u.id}"
+      onclick="navigateToUnit('${u.id}','${subjectId}','${esc(u.name)}')"
+      oncontextmenu="showCtx(event,'unit','${u.id}','${subjectId}')">
+      <div class="card-icon">📂</div>
+      <div class="card-name">${esc(u.name)}</div>
+      <div class="card-meta">Question Bank: ${assessCount} · Study Materials: ${chCount}</div>
+    </div>`;
+  });
+  html += '</div>';
+  area.innerHTML = html;
+}
+
+async function renderUnitGrid(area, unitId) {
+  const unitFiles = files.filter(f => f.unit_id === unitId);
+  const assessCount = unitFiles.filter(f => f.file_type === 'test_pdf' || f.file_type === 'assignment_pdf').length;
+  const chCount = unitFiles.filter(f => f.file_type === 'study_material').length;
+
+  let html = '<div class="grid">';
+
+  html += `<div class="grid-card" data-type="virtual"
+    onclick="navigateToVirtualAssessments('${unitId}')"
+    oncontextmenu="showCtx(event,'virtual_assessments','${unitId}')">
+    <div class="card-icon">📂</div>
+    <div class="card-name">Question Bank</div>
+    <div class="card-meta">${assessCount} file${assessCount!==1?'s':''}</div>
+  </div>`;
+
+  html += `<div class="grid-card" data-type="virtual"
+    onclick="navigateToVirtualChapters('${unitId}')"
+    oncontextmenu="showCtx(event,'virtual_chapters','${unitId}')">
+    <div class="card-icon">📂</div>
+    <div class="card-name">Study Materials</div>
+    <div class="card-meta">${chCount} file${chCount!==1?'s':''}</div>
+  </div>`;
+
+  html += '</div>';
+  area.innerHTML = html;
+}
+
+async function renderVirtualGrid(area, loc) {
+  const subjectEntry = currentPath.find(p => p.type === 'subject');
+  const subjectId = subjectEntry ? subjectEntry.id : null;
+  const courseId = currentPath[1] && currentPath[1].id;
+
+  if (loc.id === 'uploaded_files') {
+    const uploadedFiles = (files || []).filter(f => !f.course_id && !f.subject_id && !f.unit_id && f.file_type === 'uploaded');
+
+    if (!uploadedFiles.length) {
+      area.innerHTML = `<div class="empty-state"><div class="empty-icon">📥</div><p>No uploaded files yet. Right-click to bulk upload.</p></div>`;
+      return;
+    }
+
+    let html = '<div class="grid">';
+    uploadedFiles.forEach(f => {
+      const icon = f.name.endsWith('.docx') ? '📝' : '📄';
+      html += `<div class="grid-card" data-type="uploaded_file" data-id="${f.id}"
+        oncontextmenu="showCtx(event,'uploaded_file','${f.id}')">
+        <div class="card-icon">${icon}</div>
+        <div class="card-name">${esc(f.name)}</div>
+        <div class="card-meta">${formatSize(f.r2_size)}${f.r2_pages ? ' · ' + f.r2_pages + 'p' : ''}</div>
+      </div>`;
+    });
+    html += '</div>';
+    area.innerHTML = html;
+    return;
+  }
+
+  // Unit Assessments (test_pdf + assignment_pdf from a unit)
+  if (loc.id === 'unit_assessments') {
+    const unitEntry = currentPath.find(p => p.type === 'unit');
+    const unitId = unitEntry ? unitEntry.id : null;
+    const unitFiles = unitId ? files.filter(f => f.unit_id === unitId && (f.file_type === 'test_pdf' || f.file_type === 'assignment_pdf')) : [];
+
+    if (!unitFiles.length) {
+      area.innerHTML = `<div class="empty-state"><div class="empty-icon">📝</div><p>No assessments in this unit yet. Right-click to upload.</p></div>`;
+      return;
+    }
+
+    let html = '<div class="grid">';
+    unitFiles.forEach(f => {
+      html += `<div class="grid-card" data-type="file" data-id="${f.id}"
+        oncontextmenu="showCtx(event,'file','${f.id}','${unitId}')">
+        <div class="card-icon">📄</div>
+        <div class="card-name">${esc(f.name)}</div>
+        <div class="card-meta">${formatSize(f.r2_size)}${f.r2_pages ? ' · ' + f.r2_pages + 'p' : ''}</div>
+      </div>`;
+    });
+    html += '</div>';
+    area.innerHTML = html;
+    return;
+  }
+
+  // Unit Chapters (study_material from a unit)
+  if (loc.id === 'unit_chapters') {
+    const unitEntry = currentPath.find(p => p.type === 'unit');
+    const unitId = unitEntry ? unitEntry.id : null;
+    const unitFiles = unitId ? files.filter(f => f.unit_id === unitId && f.file_type === 'study_material') : [];
+
+    if (!unitFiles.length) {
+      area.innerHTML = `<div class="empty-state"><div class="empty-icon">📄</div><p>No chapters in this unit yet. Right-click to upload.</p></div>`;
+      return;
+    }
+
+    let html = '<div class="grid">';
+    unitFiles.forEach(f => {
+      html += `<div class="grid-card" data-type="file" data-id="${f.id}"
+        oncontextmenu="showCtx(event,'file','${f.id}','${unitId}')">
+        <div class="card-icon">📄</div>
+        <div class="card-name">${esc(f.name)}</div>
+        <div class="card-meta">${formatSize(f.r2_size)}${f.r2_pages ? ' · ' + f.r2_pages + 'p' : ''}</div>
+      </div>`;
+    });
+    html += '</div>';
+    area.innerHTML = html;
+    return;
+  }
+
+  if (loc.id === 'question_bank') {
+    // Question Bank: files + questions
+    const qFiles = await sbGet('files', '*', `course_id=eq.${courseId}&file_type=eq.question_bank`) || [];
+    const courseSubs = subjects.filter(s => s.course_id === courseId);
+    let qQuestions = [];
+    for (const s of courseSubs) {
+      const qs = await sbGet('questions', '*', `subject_id=eq.${s.id}`) || [];
+      qQuestions = qQuestions.concat(qs);
+    }
+
+    if (!qFiles.length && !qQuestions.length) {
+      area.innerHTML = `<div class="empty-state"><div class="empty-icon">❓</div><p>Question bank is empty. Right-click to upload or create questions.</p></div>`;
+      return;
+    }
+
+    let html = '<div class="grid">';
+    qFiles.forEach(f => {
+      html += `<div class="grid-card" data-type="file" data-id="${f.id}"
+        oncontextmenu="showCtx(event,'file','${f.id}','${courseId}')">
+        <div class="card-icon">📄</div>
+        <div class="card-name">${esc(f.name)}</div>
+        <div class="card-meta">${formatSize(f.r2_size)}${f.r2_pages ? ' · ' + f.r2_pages + 'p' : ''}</div>
+      </div>`;
+    });
+    qQuestions.forEach(q => {
+      html += `<div class="grid-card" data-type="question" data-id="${q.id}"
+        oncontextmenu="showCtx(event,'question','${q.id}','${subjectId}')">
+        <div class="card-icon">❓</div>
+        <div class="card-name">${esc(truncate(q.question, 60))}</div>
+        <div class="card-meta">${q.question_type.toUpperCase()} · ${q.marks} marks</div>
+        <div class="card-badge badge-type">${q.question_type.toUpperCase()}</div>
+      </div>`;
+    });
+    html += '</div>';
+    area.innerHTML = html;
+    return;
+  }
+
+  if (loc.id === 'tests' && !subjectId) {
+    // Course-level Tests: test PDFs from all subjects in this course
+    const courseSubs = subjects.filter(s => s.course_id === courseId);
+    let allTestFiles = [];
+    let allQuestions = [];
+    for (const s of courseSubs) {
+      const tf = await sbGet('files', '*', `subject_id=eq.${s.id}&file_type=eq.test_pdf`) || [];
+      allTestFiles = allTestFiles.concat(tf);
+      const qs = await sbGet('questions', '*', `subject_id=eq.${s.id}`) || [];
+      allQuestions = allQuestions.concat(qs);
+    }
+
+    if (!allTestFiles.length && !allQuestions.length) {
+      area.innerHTML = `<div class="empty-state"><div class="empty-icon">📝</div><p>No tests yet. Right-click to upload or create questions.</p></div>`;
+      return;
+    }
+
+    let html = '<div class="grid">';
+    allTestFiles.forEach(f => {
+      html += `<div class="grid-card" data-type="file" data-id="${f.id}"
+        oncontextmenu="showCtx(event,'file','${f.id}','${courseId}')">
+        <div class="card-icon">📄</div>
+        <div class="card-name">${esc(f.name)}</div>
+        <div class="card-meta">${formatSize(f.r2_size)}${f.r2_pages ? ' · ' + f.r2_pages + 'p' : ''}</div>
+      </div>`;
+    });
+    allQuestions.forEach(q => {
+      html += `<div class="grid-card" data-type="question" data-id="${q.id}"
+        oncontextmenu="showCtx(event,'question','${q.id}')">
+        <div class="card-icon">❓</div>
+        <div class="card-name">${esc(truncate(q.question, 60))}</div>
+        <div class="card-meta">${q.question_type.toUpperCase()} · ${q.marks} marks</div>
+        <div class="card-badge badge-type">${q.question_type.toUpperCase()}</div>
+      </div>`;
+    });
+    html += '</div>';
+    area.innerHTML = html;
+    return;
+  }
+
+  // Virtual subject subfolders (tests, assignments, materials)
+  const typeMap = { tests: 'test_pdf', assignments: 'assignment_pdf', materials: 'study_material' };
+  const fileType = typeMap[loc.id];
+  if (!fileType) { area.innerHTML = ''; return; }
+
+  const vFiles = await sbGet('files', '*', `subject_id=eq.${subjectId}&file_type=eq.${fileType}`) || [];
+  const subQuestions = loc.id === 'tests' ? (await sbGet('questions', '*', `subject_id=eq.${subjectId}`) || []) : [];
+
+  if (!vFiles.length && !subQuestions.length) {
+    area.innerHTML = `<div class="empty-state"><div class="empty-icon">📄</div><p>No ${loc.name.toLowerCase()} yet. Right-click to upload.</p></div>`;
+    return;
+  }
+
+  let html = '<div class="grid">';
+  vFiles.forEach(f => {
+    html += `<div class="grid-card" data-type="file" data-id="${f.id}"
+      oncontextmenu="showCtx(event,'file','${f.id}','${subjectId}')">
+      <div class="card-icon">📄</div>
+      <div class="card-name">${esc(f.name)}</div>
+      <div class="card-meta">${formatSize(f.r2_size)}${f.r2_pages ? ' · ' + f.r2_pages + 'p' : ''}</div>
+      ${f.is_preview ? '<div class="card-badge badge-type">Preview</div>' : ''}
+    </div>`;
+  });
+  subQuestions.forEach(q => {
+    html += `<div class="grid-card" data-type="question" data-id="${q.id}"
+      oncontextmenu="showCtx(event,'question','${q.id}','${subjectId}')">
+      <div class="card-icon">❓</div>
+      <div class="card-name">${esc(truncate(q.question, 60))}</div>
+      <div class="card-meta">${q.question_type.toUpperCase()} · ${q.marks} marks</div>
+      <div class="card-badge badge-type">${q.question_type.toUpperCase()}</div>
+    </div>`;
+  });
+  html += '</div>';
+  area.innerHTML = html;
+}
+
+// ─── Context Menu ────────────────────────────────────
+let ctxTarget = null;
+
+function showCtx(e, type, id, parentId) {
+  e.preventDefault();
+  e.stopPropagation();
+  const menu = document.getElementById('context-menu');
+  let items = [];
+
+  switch(type) {
+    case 'course':
+      items = [
+        { label: '✏️ Edit Details', action: () => openEditCourseModal(id) },
+        { sep: true },
+        { label: '🗑️ Delete', cls: 'danger', action: () => confirmDelete('course', id) }
+      ];
+      break;
+    case 'subject':
+      items = [
+        { label: '✏️ Rename', action: () => openRenameModal('subject', id) },
+        { sep: true },
+        { label: '🗑️ Delete', cls: 'danger', action: () => confirmDelete('subject', id) }
+      ];
+      break;
+    case 'unit':
+      items = [
+        { label: '✏️ Rename', action: () => openRenameModal('unit', id) },
+        { sep: true },
+        { label: '🗑️ Delete', cls: 'danger', action: () => confirmDelete('unit', id) }
+      ];
+      break;
+    case 'file':
+      items = [
+        { label: '📋 Info', action: () => showFileInfo(id) },
+        { sep: true },
+        { label: '🗑️ Delete', cls: 'danger', action: () => confirmDelete('file', id) }
+      ];
+      break;
+    case 'question':
+      items = [
+        { label: '✏️ Edit', action: () => openEditQuestionModal(id) },
+        { sep: true },
+        { label: '🗑️ Delete', cls: 'danger', action: () => confirmDelete('question', id) }
+      ];
+      break;
+    case 'virtual_qbank':
+      items = [
+        { label: '📤 Upload Question Bank', action: () => openUploadModal('question_bank', null, id) }
+      ];
+      break;
+    case 'virtual_tests':
+      if (id) {
+        items = [
+          { label: '📤 Upload Test PDF', action: () => openUploadModal('test_pdf', id, parentId) },
+          { sep: true },
+          { label: '➕ Create Question', action: () => openCreateQuestionModal(id) }
+        ];
+      } else {
+        items = [
+          { label: '📤 Upload Test PDF', action: () => openUploadModal('test_pdf', null, parentId) }
+        ];
+      }
+      break;
+    case 'virtual_assignments':
+      items = [
+        { label: '📤 Upload Assignment PDF', action: () => openUploadModal('assignment_pdf', id, parentId) }
+      ];
+      break;
+    case 'virtual_materials':
+      items = [
+        { label: '📤 Upload Study Material', action: () => openUploadModal('study_material', id, parentId) }
+      ];
+      break;
+    case 'units_folder':
+      items = [
+        { label: '➕ Create Unit', action: () => openCreateUnitModal(id, parentId) }
+      ];
+      break;
+    case 'uploaded_files':
+      items = [
+        { label: '📤 Bulk Upload Files', action: openBulkUploadModal }
+      ];
+      break;
+    case 'uploaded_file':
+      items = [
+        { label: '📋 Info', action: () => showFileInfo(id) },
+        { sep: true },
+        { label: '📂 Move To...', action: () => openMoveModal(id) },
+        { sep: true },
+        { label: '🗑️ Delete', cls: 'danger', action: () => confirmDelete('file', id) }
+      ];
+      break;
+    case 'virtual_assessments':
+      items = [
+        { label: '📤 Upload Test PDF', action: () => openUploadModal('test_pdf', null, null, id) },
+        { sep: true },
+        { label: '📤 Upload Assignment PDF', action: () => openUploadModal('assignment_pdf', null, null, id) }
+      ];
+      break;
+    case 'virtual_chapters':
+      items = [
+        { label: '📤 Upload Study Material', action: () => openUploadModal('study_material', null, null, id) }
+      ];
+      break;
+    case 'empty_desktop':
+      items = [
+        { label: '➕ Create Course', action: openCreateCourseModal },
+        { sep: true },
+        { label: '📤 Bulk Upload Files', action: openBulkUploadModal }
+      ];
+      break;
+    case 'empty_course':
+      items = [
+        { label: '➕ Create Subject', action: () => openCreateSubjectModal(id) }
+      ];
+      break;
+    case 'empty_subject':
+      items = [
+        { label: '➕ Create Unit', action: () => openCreateUnitModal(id, parentId) }
+      ];
+      break;
+    case 'empty_unit':
+      items = [
+        { label: '📤 Upload Study Material', action: () => openUploadModal('study_material', null, null, id) },
+        { sep: true },
+        { label: '📤 Upload Test PDF', action: () => openUploadModal('test_pdf', null, null, id) },
+        { label: '📤 Upload Assignment PDF', action: () => openUploadModal('assignment_pdf', null, null, id) }
+      ];
+      break;
+  }
+
+  if (!items.length) return;
+
+  menu.innerHTML = '';
+  items.forEach(item => {
+    if (item.sep) {
+      const sep = document.createElement('div');
+      sep.className = 'ctx-sep';
+      menu.appendChild(sep);
+      return;
+    }
+    const el = document.createElement('div');
+    el.className = 'ctx-item' + (item.cls ? ' ' + item.cls : '');
+    el.textContent = item.label;
+    el.onclick = () => { hideCtx(); item.action(); };
+    menu.appendChild(el);
+  });
+
+  // Position
+  const x = Math.min(e.clientX, window.innerWidth - 200);
+  const y = Math.min(e.clientY, window.innerHeight - menu.children.length * 36 - 20);
+  menu.style.left = x + 'px';
+  menu.style.top = y + 'px';
+  menu.classList.add('visible');
+}
+
+function hideCtx() {
+  document.getElementById('context-menu').classList.remove('visible');
+}
+document.addEventListener('click', hideCtx);
+
+// Grid empty-area context menu
+document.getElementById('grid-area').addEventListener('contextmenu', (e) => {
+  if (e.target.closest('.grid-card')) return;
+  e.preventDefault();
+  const loc = currentPath[currentPath.length - 1];
+  if (!loc) return;
+
+  let items = [];
+  if (loc.type === 'desktop') {
+    items = [
+      { label: '➕ Create Course', action: openCreateCourseModal },
+      { sep: true },
+      { label: '📤 Bulk Upload Files', action: openBulkUploadModal }
+    ];
+  } else if (loc.type === 'course') {
+    items = [{ label: '➕ Create Subject', action: () => openCreateSubjectModal(loc.id) }];
+  } else if (loc.type === 'subject') {
+    const courseId = currentPath[1] && currentPath[1].id;
+    items = [
+      { label: '➕ Create Unit', action: () => openCreateUnitModal(loc.id, courseId) }
+    ];
+  } else if (loc.type === 'unit') {
+    const subjectEntry = currentPath.find(p => p.type === 'subject');
+    const subjectId = subjectEntry ? subjectEntry.id : null;
+    const courseId = currentPath[1] && currentPath[1].id;
+    items = [
+      { label: '📤 Upload Study Material', action: () => openUploadModal('study_material', subjectId, courseId, loc.id) },
+      { sep: true },
+      { label: '📤 Upload Test PDF', action: () => openUploadModal('test_pdf', subjectId, courseId, loc.id) },
+      { label: '📤 Upload Assignment PDF', action: () => openUploadModal('assignment_pdf', subjectId, courseId, loc.id) }
+    ];
+  } else if (loc.type === 'virtual') {
+    const subjectEntry = currentPath.find(p => p.type === 'subject');
+    const subjectId = subjectEntry ? subjectEntry.id : null;
+    const courseId = currentPath[1] && currentPath[1].id;
+    if (loc.id === 'question_bank') {
+      items = [{ label: '📤 Upload Question Bank', action: () => openUploadModal('question_bank', null, courseId) }];
+    } else if (loc.id === 'tests') {
+      items = [
+        { label: '📤 Upload Test', action: () => openUploadModal('test_pdf', subjectId, courseId) },
+        { sep: true },
+        { label: '➕ Create Question', action: () => openCreateQuestionModal(subjectId) }
+      ];
+    } else if (loc.id === 'assignments') {
+      items = [{ label: '📤 Upload Assignment', action: () => openUploadModal('assignment_pdf', subjectId, courseId) }];
+    } else if (loc.id === 'materials') {
+      items = [{ label: '📤 Upload Study Material', action: () => openUploadModal('study_material', subjectId, courseId) }];
+    }
+  }
+
+  if (!items.length) return;
+
+  const menu = document.getElementById('context-menu');
+  menu.innerHTML = '';
+  items.forEach(item => {
+    if (item.sep) {
+      const sep = document.createElement('div');
+      sep.className = 'ctx-sep';
+      menu.appendChild(sep);
+      return;
+    }
+    const el = document.createElement('div');
+    el.className = 'ctx-item';
+    el.textContent = item.label;
+    el.onclick = () => { hideCtx(); item.action(); };
+    menu.appendChild(el);
+  });
+  menu.style.left = Math.min(e.clientX, window.innerWidth - 200) + 'px';
+  menu.style.top = Math.min(e.clientY, window.innerHeight - items.length * 36 - 20) + 'px';
+  menu.classList.add('visible');
+});
+
+// ─── Modals ──────────────────────────────────────────
+function openModal(html) {
+  document.getElementById('modal-content').innerHTML = html;
+  document.getElementById('modal-overlay').classList.add('visible');
+}
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('visible');
+}
+document.getElementById('modal-overlay').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeModal();
+});
+
+// Create Course
+function openCreateCourseModal() {
+  openModal(`
+    <h2>Create Course</h2>
+    <label>Course Name</label>
+    <input id="m-course-name" placeholder="e.g. B.Tech CSE">
+    <label>Description</label>
+    <textarea id="m-course-desc" placeholder="Course description..."></textarea>
+    <label>Price (₹)</label>
+    <input id="m-course-price" type="number" placeholder="0">
+    <label>Specifications</label>
+    <textarea id="m-course-specs" placeholder="Exam patterns, syllabus details..."></textarea>
+    <label>Terms & Conditions</label>
+    <textarea id="m-course-terms" placeholder="Terms..."></textarea>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="doCreateCourse()">Create</button>
+    </div>
+  `);
+}
+
+async function doCreateCourse() {
+  const name = document.getElementById('m-course-name').value.trim();
+  if (!name) { toast('Name is required', 'error'); return; }
+  const body = {
+    name,
+    description: document.getElementById('m-course-desc').value.trim(),
+    price: parseFloat(document.getElementById('m-course-price').value) || 0,
+    specs: document.getElementById('m-course-specs').value.trim(),
+    terms: document.getElementById('m-course-terms').value.trim(),
+    is_active: true
+  };
+  const r = await sbPost('courses', body);
+  if (r.error) { toast('Failed to create course', 'error'); return; }
+  toast('Course created', 'success');
+  closeModal();
+  courses.push(r[0]);
+  renderTree();
+  renderGrid();
+}
+
+// Edit Course
+function openEditCourseModal(id) {
+  const c = courses.find(x => x.id === id);
+  if (!c) return;
+  openModal(`
+    <h2>Edit Course</h2>
+    <label>Course Name</label>
+    <input id="m-course-name" value="${esc(c.name)}">
+    <label>Description</label>
+    <textarea id="m-course-desc">${esc(c.description || '')}</textarea>
+    <label>Price (₹)</label>
+    <input id="m-course-price" type="number" value="${c.price || 0}">
+    <label>Specifications</label>
+    <textarea id="m-course-specs">${esc(c.specs || '')}</textarea>
+    <label>Terms & Conditions</label>
+    <textarea id="m-course-terms">${esc(c.terms || '')}</textarea>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="doEditCourse('${id}')">Save</button>
+    </div>
+  `);
+}
+
+async function doEditCourse(id) {
+  const name = document.getElementById('m-course-name').value.trim();
+  if (!name) { toast('Name is required', 'error'); return; }
+  const body = {
+    name,
+    description: document.getElementById('m-course-desc').value.trim(),
+    price: parseFloat(document.getElementById('m-course-price').value) || 0,
+    specs: document.getElementById('m-course-specs').value.trim(),
+    terms: document.getElementById('m-course-terms').value.trim()
+  };
+  const r = await sbPatch('courses', id, body);
+  if (r.error) { toast('Failed to update course', 'error'); return; }
+  toast('Course updated', 'success');
+  closeModal();
+  const idx = courses.findIndex(x => x.id === id);
+  if (idx >= 0) Object.assign(courses[idx], r[0]);
+  renderTree();
+  renderGrid();
+}
+
+// Create Subject
+function openCreateSubjectModal(courseId) {
+  openModal(`
+    <h2>Create Subject</h2>
+    <label>Subject Name</label>
+    <input id="m-subject-name" placeholder="e.g. Mathematics">
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="doCreateSubject('${courseId}')">Create</button>
+    </div>
+  `);
+  setTimeout(() => document.getElementById('m-subject-name')?.focus(), 100);
+}
+
+async function doCreateSubject(courseId) {
+  const name = document.getElementById('m-subject-name').value.trim();
+  if (!name) { toast('Name is required', 'error'); return; }
+  const existing = subjects.filter(s => s.course_id === courseId);
+  const maxOrder = existing.reduce((m, s) => Math.max(m, s.order_index || 0), 0);
+  const body = { course_id: courseId, name, order_index: maxOrder + 1 };
+  const r = await sbPost('subjects', body);
+  if (r.error) { toast('Failed to create subject', 'error'); return; }
+  toast('Subject created', 'success');
+  closeModal();
+  subjects.push(r[0]);
+  renderTree();
+  renderGrid();
+}
+
+// Rename Subject/Unit
+function openRenameModal(type, id) {
+  const table = type === 'subject' ? subjects : units;
+  const item = table.find(x => x.id === id);
+  if (!item) return;
+  openModal(`
+    <h2>Rename ${type === 'subject' ? 'Subject' : 'Unit'}</h2>
+    <label>Name</label>
+    <input id="m-rename-name" value="${esc(item.name)}">
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="doRename('${type}','${id}')">Save</button>
+    </div>
+  `);
+  setTimeout(() => { const inp = document.getElementById('m-rename-name'); inp?.focus(); inp?.select(); }, 100);
+}
+
+async function doRename(type, id) {
+  const name = document.getElementById('m-rename-name').value.trim();
+  if (!name) { toast('Name is required', 'error'); return; }
+  const r = await sbPatch(type, id, { name });
+  if (r.error) { toast('Failed to rename', 'error'); return; }
+  toast('Renamed successfully', 'success');
+  closeModal();
+  if (type === 'subject') {
+    const s = subjects.find(x => x.id === id);
+    if (s) s.name = name;
+  } else {
+    const u = units.find(x => x.id === id);
+    if (u) u.name = name;
+  }
+  renderTree();
+  renderGrid();
+}
+
+// Create Unit
+function openCreateUnitModal(subjectId, courseId) {
+  openModal(`
+    <h2>Create Unit</h2>
+    <label>Unit Name</label>
+    <input id="m-unit-name" placeholder="e.g. Unit 1: Introduction">
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="doCreateUnit('${subjectId}','${courseId}')">Create</button>
+    </div>
+  `);
+  setTimeout(() => document.getElementById('m-unit-name')?.focus(), 100);
+}
+
+async function doCreateUnit(subjectId, courseId) {
+  const name = document.getElementById('m-unit-name').value.trim();
+  if (!name) { toast('Name is required', 'error'); return; }
+  const existing = units.filter(u => u.subject_id === subjectId);
+  const maxOrder = existing.reduce((m, u) => Math.max(m, u.order_index || 0), 0);
+  const body = { subject_id: subjectId, name, order_index: maxOrder + 1 };
+  const r = await sbPost('units', body);
+  if (r.error) { toast('Failed to create unit', 'error'); return; }
+  toast('Unit created', 'success');
+  closeModal();
+  units.push(r[0]);
+  renderGrid();
+}
+
+// Upload File
+function openUploadModal(fileType, subjectId, courseId, unitId) {
+  const typeLabels = {
+    test_pdf: 'Test PDF',
+    assignment_pdf: 'Assignment PDF',
+    study_material: 'Study Material',
+    question_bank: 'Question Bank'
+  };
+  openModal(`
+    <h2>Upload ${typeLabels[fileType] || 'File'}</h2>
+    <label>File Name</label>
+    <input id="m-file-name" placeholder="e.g. Chapter 1 Notes">
+    <label>Preview?</label>
+    <div class="toggle-wrap">
+      <div class="toggle" id="m-file-preview" onclick="this.classList.toggle('on')"></div>
+      <span class="toggle-label">Mark as preview (accessible without enrollment)</span>
+    </div>
+    <label>PDF File</label>
+    <div class="drop-zone" id="m-drop-zone">
+      <div class="dz-icon">📄</div>
+      <p>Drag & drop a PDF here or click to browse</p>
+      <input type="file" id="m-file-input" accept=".pdf" style="display:none">
+    </div>
+    <div class="progress-wrap" id="m-progress-wrap">
+      <div class="progress-bar-bg"><div class="progress-bar-fill" id="m-progress-fill"></div></div>
+      <div class="progress-text" id="m-progress-text">Processing...</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" id="m-upload-btn" onclick="doUploadFile('${fileType}','${subjectId || ''}','${courseId || ''}','${unitId || ''}')" disabled>Upload</button>
+    </div>
+  `);
+
+  const dz = document.getElementById('m-drop-zone');
+  const inp = document.getElementById('m-file-input');
+  dz.onclick = () => inp.click();
+  dz.ondragover = (e) => { e.preventDefault(); dz.classList.add('dragover'); };
+  dz.ondragleave = () => dz.classList.remove('dragover');
+  dz.ondrop = (e) => {
+    e.preventDefault();
+    dz.classList.remove('dragover');
+    if (e.dataTransfer.files.length) handleFileSelect(e.dataTransfer.files[0]);
+  };
+  inp.onchange = () => { if (inp.files.length) handleFileSelect(inp.files[0]); };
+}
+
+let selectedPdfFile = null;
+
+function handleFileSelect(file) {
+  if (file.type !== 'application/pdf') { toast('Please select a PDF file', 'error'); return; }
+  selectedPdfFile = file;
+  const dz = document.getElementById('m-drop-zone');
+  dz.innerHTML = `<div class="dz-icon">✅</div><div class="dz-file">${esc(file.name)}</div><p>${formatSize(file.size)}</p>`;
+  document.getElementById('m-file-name').value = file.name.replace(/\.pdf$/i, '');
+  document.getElementById('m-upload-btn').disabled = false;
+}
+
+async function doUploadFile(fileType, subjectId, courseId, unitId) {
+  if (!selectedPdfFile) { toast('Please select a PDF', 'error'); return; }
+  const name = document.getElementById('m-file-name').value.trim() || selectedPdfFile.name;
+  const isPreview = document.getElementById('m-file-preview').classList.contains('on');
+  const progWrap = document.getElementById('m-progress-wrap');
+  const progFill = document.getElementById('m-progress-fill');
+  const progText = document.getElementById('m-progress-text');
+  const uploadBtn = document.getElementById('m-upload-btn');
+
+  progWrap.style.display = 'block';
+  uploadBtn.disabled = true;
+  uploadBtn.textContent = 'Processing...';
+
+  // Resolve parent IDs from unit if not provided
+  if (!courseId && !subjectId && unitId) {
+    const unit = units.find(u => u.id === unitId);
+    if (unit) {
+      subjectId = unit.subject_id;
+      const sub = subjects.find(s => s.id === subjectId);
+      if (sub) courseId = sub.course_id;
+    }
+  }
+
+  try {
+    // Read PDF
+    const arrayBuffer = await selectedPdfFile.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const totalPages = pdf.numPages;
+
+    progText.textContent = `Rendering ${totalPages} pages...`;
+    progFill.style.width = '20%';
+
+    // We don't actually render pages for MVP - just store metadata
+    // In production, pages would be rendered and uploaded to R2
+    progFill.style.width = '60%';
+    progText.textContent = 'Saving file record...';
+
+    const body = {
+      course_id: courseId || null,
+      subject_id: subjectId || null,
+      unit_id: unitId || null,
+      file_type: fileType,
+      name: name,
+      r2_key: '',
+      r2_size: selectedPdfFile.size,
+      r2_pages: totalPages,
+      expected_pages: totalPages,
+      is_preview: isPreview
+    };
+
+    const r = await sbPost('files', body);
+    if (r.error) throw r.error;
+
+    progFill.style.width = '100%';
+    progText.textContent = 'Done!';
+    toast('File uploaded successfully', 'success');
+    setTimeout(() => { closeModal(); selectedPdfFile = null; renderGrid(); }, 500);
+  } catch(e) {
+    console.error(e);
+    toast('Upload failed: ' + (e.message || 'Unknown error'), 'error');
+    uploadBtn.disabled = false;
+    uploadBtn.textContent = 'Upload';
+    progWrap.style.display = 'none';
+  }
+}
+
+// Bulk Upload Modal
+let bulkFiles = [];
+
+function openBulkUploadModal() {
+  bulkFiles = [];
+  openModal(`
+    <h2>Bulk Upload Files</h2>
+    <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px">Upload multiple PDFs or a ZIP file. Files will appear in Uploaded Files folder.</p>
+    <div class="drop-zone" id="m-bulk-drop-zone">
+      <div class="dz-icon">📦</div>
+      <p>Drag & drop PDFs or ZIP here, or click to browse</p>
+      <p style="font-size:12px;color:var(--text-muted);margin-top:8px">Supports: PDF, DOCX, ZIP (containing PDFs/DOCX)</p>
+      <input type="file" id="m-bulk-file-input" accept=".pdf,.docx,.zip" multiple style="display:none">
+    </div>
+    <div id="m-bulk-file-list" style="max-height:200px;overflow-y:auto;margin-top:12px"></div>
+    <div class="progress-wrap" id="m-bulk-progress-wrap">
+      <div class="progress-bar-bg"><div class="progress-bar-fill" id="m-bulk-progress-fill"></div></div>
+      <div class="progress-text" id="m-bulk-progress-text">Processing...</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" id="m-bulk-upload-btn" onclick="doBulkUpload()" disabled>Upload All</button>
+    </div>
+  `);
+
+  const dz = document.getElementById('m-bulk-drop-zone');
+  const inp = document.getElementById('m-bulk-file-input');
+  dz.onclick = () => inp.click();
+  dz.ondragover = (e) => { e.preventDefault(); dz.classList.add('dragover'); };
+  dz.ondragleave = () => dz.classList.remove('dragover');
+  dz.ondrop = async (e) => {
+    e.preventDefault();
+    dz.classList.remove('dragover');
+    await handleBulkFiles(e.dataTransfer.files);
+  };
+  inp.onchange = async () => { if (inp.files.length) await handleBulkFiles(inp.files); };
+}
+
+async function handleBulkFiles(fileList) {
+  for (const file of fileList) {
+    if (file.name.toLowerCase().endsWith('.zip')) {
+      try {
+        const zip = await JSZip.loadAsync(file);
+        const entries = [];
+        zip.forEach((path, entry) => {
+          if (!entry.dir && /\.(pdf|docx)$/i.test(path)) {
+            entries.push({ path, entry });
+          }
+        });
+        for (const { path, entry } of entries) {
+          const blob = await entry.async('blob');
+          const ext = path.split('.').pop().toLowerCase();
+          const mime = ext === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+          const f = new File([blob], path.split('/').pop(), { type: mime });
+          bulkFiles.push(f);
+        }
+        toast(`Extracted ${entries.length} files from ${file.name}`, 'success');
+      } catch(e) {
+        toast(`Failed to extract ${file.name}: ${e.message}`, 'error');
+      }
+    } else if (/\.(pdf|docx)$/i.test(file.name)) {
+      bulkFiles.push(file);
+    } else {
+      toast(`Skipped ${file.name} (unsupported type)`, 'error');
+    }
+  }
+  renderBulkFileList();
+}
+
+function renderBulkFileList() {
+  const list = document.getElementById('m-bulk-file-list');
+  const btn = document.getElementById('m-bulk-upload-btn');
+  if (!bulkFiles.length) {
+    list.innerHTML = '';
+    btn.disabled = true;
+    return;
+  }
+  btn.disabled = false;
+  list.innerHTML = bulkFiles.map((f, i) => `
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--bg);border-radius:6px;margin-bottom:4px;font-size:13px">
+      <span>${f.name.endsWith('.docx') ? '📝' : '📄'}</span>
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.name)}</span>
+      <span style="color:var(--text-muted)">${formatSize(f.size)}</span>
+      <button onclick="removeBulkFile(${i})" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:16px">×</button>
+    </div>
+  `).join('');
+}
+
+function removeBulkFile(idx) {
+  bulkFiles.splice(idx, 1);
+  renderBulkFileList();
+}
+
+async function doBulkUpload() {
+  if (!bulkFiles.length) return;
+  const btn = document.getElementById('m-bulk-upload-btn');
+  const progWrap = document.getElementById('m-bulk-progress-wrap');
+  const progFill = document.getElementById('m-bulk-progress-fill');
+  const progText = document.getElementById('m-bulk-progress-text');
+
+  progWrap.style.display = 'block';
+  btn.disabled = true;
+  btn.textContent = 'Uploading...';
+
+  let successCount = 0;
+  let failCount = 0;
+
+  for (let i = 0; i < bulkFiles.length; i++) {
+    const file = bulkFiles[i];
+    const pct = Math.round(((i + 1) / bulkFiles.length) * 100);
+    progFill.style.width = pct + '%';
+    progText.textContent = `Uploading ${i + 1}/${bulkFiles.length}: ${file.name}`;
+
+    try {
+      let totalPages = 0;
+      if (file.type === 'application/pdf') {
+        const ab = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: ab }).promise;
+        totalPages = pdf.numPages;
+      }
+
+      const body = {
+        course_id: null,
+        subject_id: null,
+        unit_id: null,
+        file_type: 'uploaded',
+        name: file.name.replace(/\.(pdf|docx)$/i, ''),
+        r2_key: '',
+        r2_size: file.size,
+        r2_pages: totalPages,
+        expected_pages: totalPages,
+        is_preview: false
+      };
+
+      const r = await sbPost('files', body);
+      if (r.error) {
+        console.error('sbPost error:', JSON.stringify(r.error));
+        throw r.error;
+      }
+      successCount++;
+    } catch(e) {
+      console.error('Upload failed:', file.name, e.message || e);
+      failCount++;
+    }
+  }
+
+  progText.textContent = `Done! ${successCount} uploaded, ${failCount} failed`;
+  progFill.style.width = '100%';
+  toast(`${successCount} file(s) uploaded to Uploaded Files`, successCount > 0 ? 'success' : 'error');
+
+  setTimeout(() => {
+    closeModal();
+    bulkFiles = [];
+    renderGrid();
+  }, 1500);
+}
+
+// Move File Modal
+function openMoveModal(fileId) {
+  const file = files.find(f => f.id === fileId);
+  if (!file) return;
+
+  // Build destination tree
+  let options = [];
+  courses.forEach(c => {
+    options.push({ label: `📁 ${c.name}`, value: `course:${c.id}` });
+    const subs = subjects.filter(s => s.course_id === c.id);
+    subs.forEach(s => {
+      options.push({ label: `&nbsp;&nbsp;📂 ${s.name}`, value: `subject:${s.id}` });
+      const units = units.filter(u => u.subject_id === s.id);
+      units.forEach(u => {
+        options.push({ label: `&nbsp;&nbsp;&nbsp;&nbsp;📂 ${u.name}`, value: `unit:${u.id}` });
+      });
+    });
+  });
+
+  if (!options.length) {
+    toast('No courses/subjects/units exist yet. Create them first.', 'error');
+    return;
+  }
+
+  openModal(`
+    <h2>Move "${esc(file.name)}"</h2>
+    <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px">Select a destination folder:</p>
+    <label>Destination</label>
+    <select id="m-move-dest" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:14px">
+      <option value="">-- Select --</option>
+      ${options.map(o => `<option value="${o.value}">${o.label}</option>`).join('')}
+    </select>
+    <label>File Type</label>
+    <select id="m-move-type" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:14px">
+      <option value="study_material">Study Material</option>
+      <option value="test_pdf">Test PDF</option>
+      <option value="assignment_pdf">Assignment PDF</option>
+      <option value="question_bank">Question Bank</option>
+    </select>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="doMoveFile('${fileId}')">Move</button>
+    </div>
+  `);
+}
+
+async function doMoveFile(fileId) {
+  const dest = document.getElementById('m-move-dest').value;
+  const fileType = document.getElementById('m-move-type').value;
+  if (!dest) { toast('Please select a destination', 'error'); return; }
+
+  const [destType, destId] = dest.split(':');
+  const update = { file_type: fileType };
+
+  if (destType === 'course') {
+    update.course_id = destId;
+    update.subject_id = null;
+    update.unit_id = null;
+  } else if (destType === 'subject') {
+    const sub = subjects.find(s => s.id === destId);
+    update.subject_id = destId;
+    update.course_id = sub ? sub.course_id : null;
+    update.unit_id = null;
+  } else if (destType === 'unit') {
+    const unit = units.find(u => u.id === destId);
+    const sub = unit ? subjects.find(s => s.id === unit.subject_id) : null;
+    update.unit_id = destId;
+    update.subject_id = sub ? sub.id : null;
+    update.course_id = sub ? sub.course_id : null;
+  }
+
+  const r = await sbPatch('files', fileId, update);
+  if (r.error) {
+    toast('Move failed: ' + r.error.message, 'error');
+  } else {
+    // Update local cache
+    const f = files.find(x => x.id === fileId);
+    if (f) Object.assign(f, update);
+    toast('File moved successfully', 'success');
+    closeModal();
+    renderGrid();
+  }
+}
+
+// Create Question
+function openCreateQuestionModal(subjectId) {
+  openModal(`
+    <h2>Create Question</h2>
+    <label>Question Type</label>
+    <select id="m-q-type" onchange="toggleMcqOptions()">
+      <option value="mcq">MCQ</option>
+      <option value="short">Short Answer</option>
+      <option value="long">Long Answer</option>
+    </select>
+    <label>Question</label>
+    <textarea id="m-q-text" placeholder="Enter the question..."></textarea>
+    <div id="mcq-options-area">
+      <label>Options</label>
+      <div id="m-q-options">
+        <div class="option-row"><input placeholder="Option A"><button onclick="removeOption(this)">×</button></div>
+        <div class="option-row"><input placeholder="Option B"><button onclick="removeOption(this)">×</button></div>
+        <div class="option-row"><input placeholder="Option C"><button onclick="removeOption(this)">×</button></div>
+        <div class="option-row"><input placeholder="Option D"><button onclick="removeOption(this)">×</button></div>
+      </div>
+      <button class="add-option-btn" onclick="addOption()">+ Add Option</button>
+    </div>
+    <label>Answer</label>
+    <input id="m-q-answer" placeholder="Correct answer">
+    <label>Marks</label>
+    <input id="m-q-marks" type="number" value="1" min="1">
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="doCreateQuestion('${subjectId}')">Create</button>
+    </div>
+  `);
+}
+
+function toggleMcqOptions() {
+  const type = document.getElementById('m-q-type').value;
+  document.getElementById('mcq-options-area').style.display = type === 'mcq' ? 'block' : 'none';
+}
+
+function addOption() {
+  const container = document.getElementById('m-q-options');
+  const row = document.createElement('div');
+  row.className = 'option-row';
+  row.innerHTML = `<input placeholder="Option"><button onclick="removeOption(this)">×</button>`;
+  container.appendChild(row);
+}
+
+function removeOption(btn) {
+  const container = document.getElementById('m-q-options');
+  if (container.children.length > 2) {
+    btn.parentElement.remove();
+  } else {
+    toast('Minimum 2 options required', 'error');
+  }
+}
+
+async function doCreateQuestion(subjectId) {
+  const type = document.getElementById('m-q-type').value;
+  const question = document.getElementById('m-q-text').value.trim();
+  if (!question) { toast('Question text is required', 'error'); return; }
+
+  let options = null;
+  if (type === 'mcq') {
+    const rows = document.querySelectorAll('#m-q-options .option-row input');
+    options = Array.from(rows).map(r => r.value.trim()).filter(Boolean);
+    if (options.length < 2) { toast('At least 2 options required', 'error'); return; }
+  }
+
+  const body = {
+    subject_id: subjectId,
+    question_type: type,
+    question,
+    options: options ? JSON.stringify(options) : null,
+    answer: document.getElementById('m-q-answer').value.trim(),
+    marks: parseInt(document.getElementById('m-q-marks').value) || 1
+  };
+
+  const r = await sbPost('questions', body);
+  if (r.error) { toast('Failed to create question', 'error'); return; }
+  toast('Question created', 'success');
+  closeModal();
+  renderGrid();
+}
+
+// Edit Question
+async function openEditQuestionModal(id) {
+  const q = await sbGet('questions', '*', `id=eq.${id}`);
+  if (!q || !q.length) { toast('Question not found', 'error'); return; }
+  const question = q[0];
+  let optionsHtml = '';
+  if (question.question_type === 'mcq') {
+    const opts = question.options ? (typeof question.options === 'string' ? JSON.parse(question.options) : question.options) : [];
+    optionsHtml = opts.map((o, i) =>
+      `<div class="option-row"><input value="${esc(o)}" placeholder="Option ${String.fromCharCode(65+i)}"><button onclick="removeOption(this)">×</button></div>`
+    ).join('');
+  }
+
+  openModal(`
+    <h2>Edit Question</h2>
+    <label>Question Type</label>
+    <select id="m-q-type" onchange="toggleMcqOptions()" ${question.question_type !== 'mcq' ? '' : ''}>
+      <option value="mcq" ${question.question_type==='mcq'?'selected':''}>MCQ</option>
+      <option value="short" ${question.question_type==='short'?'selected':''}>Short Answer</option>
+      <option value="long" ${question.question_type==='long'?'selected':''}>Long Answer</option>
+    </select>
+    <label>Question</label>
+    <textarea id="m-q-text">${esc(question.question)}</textarea>
+    <div id="mcq-options-area" style="display:${question.question_type==='mcq'?'block':'none'}">
+      <label>Options</label>
+      <div id="m-q-options">${optionsHtml}</div>
+      <button class="add-option-btn" onclick="addOption()">+ Add Option</button>
+    </div>
+    <label>Answer</label>
+    <input id="m-q-answer" value="${esc(question.answer || '')}">
+    <label>Marks</label>
+    <input id="m-q-marks" type="number" value="${question.marks || 1}" min="1">
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="doEditQuestion('${id}')">Save</button>
+    </div>
+  `);
+}
+
+async function doEditQuestion(id) {
+  const type = document.getElementById('m-q-type').value;
+  const question = document.getElementById('m-q-text').value.trim();
+  if (!question) { toast('Question text is required', 'error'); return; }
+
+  let options = null;
+  if (type === 'mcq') {
+    const rows = document.querySelectorAll('#m-q-options .option-row input');
+    options = Array.from(rows).map(r => r.value.trim()).filter(Boolean);
+  }
+
+  const body = {
+    question_type: type,
+    question,
+    options: options ? JSON.stringify(options) : null,
+    answer: document.getElementById('m-q-answer').value.trim(),
+    marks: parseInt(document.getElementById('m-q-marks').value) || 1
+  };
+
+  const r = await sbPatch('questions', id, body);
+  if (r.error) { toast('Failed to update question', 'error'); return; }
+  toast('Question updated', 'success');
+  closeModal();
+  renderGrid();
+}
+
+// File Info
+async function showFileInfo(id) {
+  const f = await sbGet('files', '*', `id=eq.${id}`);
+  if (!f || !f.length) return;
+  const file = f[0];
+  openModal(`
+    <h2>File Info</h2>
+    <table style="width:100%;font-size:13px;border-collapse:collapse;">
+      <tr><td style="color:var(--text-muted);padding:6px 12px 6px 0;">Name</td><td>${esc(file.name)}</td></tr>
+      <tr><td style="color:var(--text-muted);padding:6px 12px 6px 0;">Type</td><td>${esc(file.file_type)}</td></tr>
+      <tr><td style="color:var(--text-muted);padding:6px 12px 6px 0;">Size</td><td>${formatSize(file.r2_size)}</td></tr>
+      <tr><td style="color:var(--text-muted);padding:6px 12px 6px 0;">Pages</td><td>${file.r2_pages || 'N/A'}</td></tr>
+      <tr><td style="color:var(--text-muted);padding:6px 12px 6px 0;">Preview</td><td>${file.is_preview ? 'Yes' : 'No'}</td></tr>
+      <tr><td style="color:var(--text-muted);padding:6px 12px 6px 0;">Created</td><td>${new Date(file.created_at).toLocaleString()}</td></tr>
+      <tr><td style="color:var(--text-muted);padding:6px 12px 6px 0;">R2 Key</td><td style="word-break:break-all;">${esc(file.r2_key || 'N/A')}</td></tr>
+    </table>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Close</button>
+    </div>
+  `);
+}
+
+// Delete Confirmation
+function confirmDelete(type, id) {
+  const labels = { course: 'course', subject: 'subject', unit: 'unit', file: 'file', question: 'question' };
+  openModal(`
+    <h2>Delete ${labels[type] || type}</h2>
+    <p style="color:var(--text-muted);font-size:14px;">Are you sure you want to delete this ${labels[type] || type}? This action cannot be undone.</p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-danger" onclick="doDelete('${type}','${id}')">Delete</button>
+    </div>
+  `);
+}
+
+async function doDelete(type, id) {
+  const r = await sbDelete(type, id);
+  if (r.error) { toast('Failed to delete', 'error'); return; }
+  toast('Deleted', 'success');
+  closeModal();
+
+  if (type === 'course') {
+    courses = courses.filter(x => x.id !== id);
+    subjects = subjects.filter(x => x.course_id !== id);
+  } else if (type === 'subject') {
+    subjects = subjects.filter(x => x.id !== id);
+  } else if (type === 'unit') {
+    units = units.filter(x => x.id !== id);
+  }
+  renderTree();
+  renderGrid();
+}
+
+// ─── Utilities ───────────────────────────────────────
+function esc(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function truncate(s, n) { return s && s.length > n ? s.slice(0, n) + '...' : s || ''; }
+function formatSize(bytes) {
+  if (!bytes) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let i = 0;
+  let s = bytes;
+  while (s >= 1024 && i < units.length - 1) { s /= 1024; i++; }
+  return s.toFixed(i ? 1 : 0) + ' ' + units[i];
+}
+
+function toast(msg, type = 'info') {
+  const c = document.getElementById('toast-container');
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.textContent = msg;
+  c.appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity 0.3s'; setTimeout(() => el.remove(), 300); }, 3000);
+}
+
+async function refreshAll() {
+  await loadSidebar();
+  renderGrid();
+  toast('Refreshed', 'info');
+}
+
+// Keyboard shortcut: Escape closes modal/context menu
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    closeModal();
+    hideCtx();
+  }
+});
+</script>
+</body>
+</html>
