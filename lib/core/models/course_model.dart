@@ -6,6 +6,7 @@ class CourseModel {
   final String specs;
   final String terms;
   final bool isActive;
+  final DateTime? subscriptionEndDate;
   final DateTime createdAt;
 
   CourseModel({
@@ -16,6 +17,7 @@ class CourseModel {
     this.specs = '',
     this.terms = '',
     this.isActive = true,
+    this.subscriptionEndDate,
     required this.createdAt,
   });
 
@@ -27,6 +29,9 @@ class CourseModel {
         specs: (map['specs'] as String?) ?? '',
         terms: (map['terms'] as String?) ?? '',
         isActive: (map['is_active'] as bool?) ?? true,
+        subscriptionEndDate: map['subscription_end_date'] != null
+            ? DateTime.parse(map['subscription_end_date'] as String)
+            : null,
         createdAt: DateTime.parse(map['created_at'] as String),
       );
 
@@ -38,6 +43,7 @@ class CourseModel {
         'specs': specs,
         'terms': terms,
         'is_active': isActive,
+        'subscription_end_date': subscriptionEndDate?.toIso8601String(),
         'created_at': createdAt.toIso8601String(),
       };
 }

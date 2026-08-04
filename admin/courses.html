@@ -437,6 +437,21 @@ async function sbPatch(table, id, body) {
   return data;
 }
 
+async function sbFunc(name, body) {
+  const r = await fetch(`${SB_URL}/functions/v1/${name}`, {
+    method: 'POST',
+    headers: {
+      'apikey': SB_KEY,
+      'Authorization': 'Bearer ' + SB_KEY,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  const data = await r.json();
+  if (!r.ok) return { error: data };
+  return data;
+}
+
 async function sbDelete(table, id) {
   const r = await fetch(`${SB_URL}/rest/v1/${table}?id=eq.${id}`, {
     method: 'DELETE', headers: sbHeaders()
@@ -838,6 +853,7 @@ async function renderVirtualGrid(area, loc) {
     uploadedFiles.forEach(f => {
       const icon = f.name.endsWith('.docx') ? '📝' : '📄';
       html += `<div class="grid-card" data-type="uploaded_file" data-id="${f.id}"
+        onclick="openFileActions('${f.id}')"
         oncontextmenu="showCtx(event,'uploaded_file','${f.id}')">
         <div class="card-icon">${icon}</div>
         <div class="card-name">${esc(f.name)}</div>
@@ -1266,8 +1282,12 @@ function openCreateCourseModal() {
     <input id="m-course-name" placeholder="e.g. B.Tech CSE">
     <label>Description</label>
     <textarea id="m-course-desc" placeholder="Course description..."></textarea>
-    <label>Price (₹)</label>
+    <label>Price (₹/month) — set 0 for free course</label>
     <input id="m-course-price" type="number" placeholder="0">
+    <label>Course Duration (months)</label>
+    <input id="m-course-duration" type="number" min="1" max="60" placeholder="e.g. 6" oninput="calcEndDate()">
+    <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">Ends: <span id="m-course-end-display">—</span></div>
+    <input id="m-course-end-date" type="hidden">
     <label>Specifications</label>
     <textarea id="m-course-specs" placeholder="Exam patterns, syllabus details..."></textarea>
     <label>Terms & Conditions</label>
@@ -1286,6 +1306,7 @@ async function doCreateCourse() {
     name,
     description: document.getElementById('m-course-desc').value.trim(),
     price: parseFloat(document.getElementById('m-course-price').value) || 0,
+    subscription_end_date: document.getElementById('m-course-end-date').value || null,
     specs: document.getElementById('m-course-specs').value.trim(),
     terms: document.getElementById('m-course-terms').value.trim(),
     is_active: true
@@ -1303,14 +1324,29 @@ async function doCreateCourse() {
 function openEditCourseModal(id) {
   const c = courses.find(x => x.id === id);
   if (!c) return;
+  // Calculate remaining months from existing end date
+  let dur = '';
+  let endDisp = '—';
+  if (c.subscription_end_date) {
+    const end = new Date(c.subscription_end_date);
+    const now = new Date();
+    const months = (end.getFullYear() - now.getFullYear()) * 12 + (end.getMonth() - now.getMonth());
+    dur = Math.max(1, months);
+    const months31 = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    endDisp = `${String(end.getDate()).padStart(2,'0')} ${months31[end.getMonth()]} ${end.getFullYear()} (${dur} month${dur > 1 ? 's' : ''})`;
+  }
   openModal(`
     <h2>Edit Course</h2>
     <label>Course Name</label>
     <input id="m-course-name" value="${esc(c.name)}">
     <label>Description</label>
     <textarea id="m-course-desc">${esc(c.description || '')}</textarea>
-    <label>Price (₹)</label>
+    <label>Price (₹/month) — set 0 for free course</label>
     <input id="m-course-price" type="number" value="${c.price || 0}">
+    <label>Course Duration (months)</label>
+    <input id="m-course-duration" type="number" min="1" max="60" placeholder="e.g. 6" value="${dur}" oninput="calcEndDate()">
+    <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">Ends: <span id="m-course-end-display">${endDisp}</span></div>
+    <input id="m-course-end-date" type="hidden" value="${c.subscription_end_date || ''}">
     <label>Specifications</label>
     <textarea id="m-course-specs">${esc(c.specs || '')}</textarea>
     <label>Terms & Conditions</label>
@@ -1329,6 +1365,7 @@ async function doEditCourse(id) {
     name,
     description: document.getElementById('m-course-desc').value.trim(),
     price: parseFloat(document.getElementById('m-course-price').value) || 0,
+    subscription_end_date: document.getElementById('m-course-end-date').value || null,
     specs: document.getElementById('m-course-specs').value.trim(),
     terms: document.getElementById('m-course-terms').value.trim()
   };
@@ -1519,22 +1556,56 @@ async function doUploadFile(fileType, subjectId, courseId, unitId) {
     const arrayBuffer = await selectedPdfFile.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     const totalPages = pdf.numPages;
+    const fileId = crypto.randomUUID();
 
     progText.textContent = `Rendering ${totalPages} pages...`;
-    progFill.style.width = '20%';
+    progFill.style.width = '10%';
 
-    // We don't actually render pages for MVP - just store metadata
-    // In production, pages would be rendered and uploaded to R2
-    progFill.style.width = '60%';
+    // Render all pages to JPEG blobs
+    const blobs = [];
+    for (let i = 1; i <= totalPages; i++) {
+      progText.textContent = `Rendering page ${i}/${totalPages}...`;
+      const page = await pdf.getPage(i);
+      const viewport = page.getViewport({ scale: 1.5 });
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      const ctx = canvas.getContext('2d');
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85));
+      blobs.push(blob);
+      progFill.style.width = `${10 + (i / totalPages) * 30}%`;
+    }
+
+    // Upload all pages via edge function
+    progText.textContent = `Uploading ${totalPages} pages to R2...`;
+    progFill.style.width = '45%';
+    const formData = new FormData();
+    formData.append('file_id', fileId);
+    for (let i = 0; i < blobs.length; i++) {
+      formData.append(`page_${i + 1}`, blobs[i], `page_${i + 1}.jpg`);
+    }
+    const uploadRes = await fetch(`${SB_URL}/functions/v1/upload-pages`, {
+      method: 'POST',
+      headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` },
+      body: formData,
+    });
+    const uploadData = await uploadRes.json();
+    if (uploadData.error) throw new Error(uploadData.error);
+    const failedPages = (uploadData.results || []).filter(r => !r.ok);
+    if (failedPages.length > 0) throw new Error(`Failed to upload pages: ${failedPages.map(p => p.page).join(', ')}`);
+
+    progFill.style.width = '85%';
     progText.textContent = 'Saving file record...';
 
     const body = {
+      id: fileId,
       course_id: courseId || null,
       subject_id: subjectId || null,
       unit_id: unitId || null,
       file_type: fileType,
       name: name,
-      r2_key: '',
+      r2_key: `notes/${fileId}`,
       r2_size: selectedPdfFile.size,
       r2_pages: totalPages,
       expected_pages: totalPages,
@@ -1546,7 +1617,7 @@ async function doUploadFile(fileType, subjectId, courseId, unitId) {
 
     progFill.style.width = '100%';
     progText.textContent = 'Done!';
-    toast('File uploaded successfully', 'success');
+    toast('File uploaded and pages stored in R2', 'success');
     setTimeout(() => { closeModal(); selectedPdfFile = null; renderGrid(); }, 500);
   } catch(e) {
     console.error(e);
@@ -1672,19 +1743,52 @@ async function doBulkUpload() {
 
     try {
       let totalPages = 0;
+      const fileId = crypto.randomUUID();
+
       if (file.type === 'application/pdf') {
         const ab = await file.arrayBuffer();
         const pdf = await pdfjsLib.getDocument({ data: ab }).promise;
         totalPages = pdf.numPages;
+
+        // Render all pages to blobs
+        const blobs = [];
+        for (let p = 1; p <= totalPages; p++) {
+          const page = await pdf.getPage(p);
+          const viewport = page.getViewport({ scale: 1.5 });
+          const canvas = document.createElement('canvas');
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          const ctx = canvas.getContext('2d');
+          await page.render({ canvasContext: ctx, viewport }).promise;
+          const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85));
+          blobs.push(blob);
+        }
+
+        // Upload via edge function
+        const formData = new FormData();
+        formData.append('file_id', fileId);
+        for (let p = 0; p < blobs.length; p++) {
+          formData.append(`page_${p + 1}`, blobs[p], `page_${p + 1}.jpg`);
+        }
+        const uploadRes = await fetch(`${SB_URL}/functions/v1/upload-pages`, {
+          method: 'POST',
+          headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` },
+          body: formData,
+        });
+        const uploadData = await uploadRes.json();
+        if (uploadData.error) throw new Error(uploadData.error);
+        const failedPages = (uploadData.results || []).filter(r => !r.ok);
+        if (failedPages.length > 0) throw new Error(`Failed to upload pages: ${failedPages.map(p => p.page).join(', ')}`);
       }
 
       const body = {
+        id: fileId,
         course_id: null,
         subject_id: null,
         unit_id: null,
         file_type: 'uploaded',
         name: file.name.replace(/\.(pdf|docx)$/i, ''),
-        r2_key: '',
+        r2_key: totalPages > 0 ? `notes/${fileId}` : '',
         r2_size: file.size,
         r2_pages: totalPages,
         expected_pages: totalPages,
@@ -1717,7 +1821,7 @@ async function doBulkUpload() {
 // Move File Modal
 function openMoveModal(fileId) {
   const file = files.find(f => f.id === fileId);
-  if (!file) return;
+  if (!file) { toast('File not found', 'error'); return; }
 
   // Build destination tree
   let options = [];
@@ -1726,8 +1830,8 @@ function openMoveModal(fileId) {
     const subs = subjects.filter(s => s.course_id === c.id);
     subs.forEach(s => {
       options.push({ label: `&nbsp;&nbsp;📂 ${s.name}`, value: `subject:${s.id}` });
-      const units = units.filter(u => u.subject_id === s.id);
-      units.forEach(u => {
+      const subUnits = units.filter(u => u.subject_id === s.id);
+      subUnits.forEach(u => {
         options.push({ label: `&nbsp;&nbsp;&nbsp;&nbsp;📂 ${u.name}`, value: `unit:${u.id}` });
       });
     });
@@ -1947,6 +2051,23 @@ async function doEditQuestion(id) {
 }
 
 // File Info
+function openFileActions(id) {
+  const file = files.find(f => f.id === id);
+  if (!file) return;
+  openModal(`
+    <h2>${esc(file.name)}</h2>
+    <p style="color:var(--text-muted);font-size:13px;margin-bottom:20px;">${formatSize(file.r2_size)}${file.r2_pages ? ' · ' + file.r2_pages + ' pages' : ''}</p>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <button class="btn btn-primary" onclick="openMoveModal('${id}')" style="width:100%">📂 Move To...</button>
+      <button class="btn btn-ghost" onclick="showFileInfo('${id}')" style="width:100%">📋 Info</button>
+      <button class="btn btn-danger" onclick="confirmDelete('file','${id}')" style="width:100%">🗑️ Delete</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+    </div>
+  `);
+}
+
 async function showFileInfo(id) {
   const f = await sbGet('files', '*', `id=eq.${id}`);
   if (!f || !f.length) return;
@@ -1982,7 +2103,8 @@ function confirmDelete(type, id) {
 }
 
 async function doDelete(type, id) {
-  const r = await sbDelete(type, id);
+  const tableMap = { course: 'courses', subject: 'subjects', unit: 'units', file: 'files', question: 'questions' };
+  const r = await sbDelete(tableMap[type] || type, id);
   if (r.error) { toast('Failed to delete', 'error'); return; }
   toast('Deleted', 'success');
   closeModal();
@@ -2000,6 +2122,22 @@ async function doDelete(type, id) {
 }
 
 // ─── Utilities ───────────────────────────────────────
+// Calculate end date from duration
+function calcEndDate() {
+  const months = parseInt(document.getElementById('m-course-duration').value) || 0;
+  const display = document.getElementById('m-course-end-display');
+  const hidden = document.getElementById('m-course-end-date');
+  if (months <= 0) { display.textContent = '—'; hidden.value = ''; return; }
+  const end = new Date();
+  end.setMonth(end.getMonth() + months);
+  const yyyy = end.getFullYear();
+  const mm = String(end.getMonth() + 1).padStart(2, '0');
+  const dd = String(end.getDate()).padStart(2, '0');
+  hidden.value = `${yyyy}-${mm}-${dd}`;
+  const months31 = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  display.textContent = `${dd} ${months31[end.getMonth()]} ${yyyy} (${months} month${months > 1 ? 's' : ''})`;
+}
+
 function esc(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 function truncate(s, n) { return s && s.length > n ? s.slice(0, n) + '...' : s || ''; }
 function formatSize(bytes) {

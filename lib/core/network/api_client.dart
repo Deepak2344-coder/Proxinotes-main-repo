@@ -55,6 +55,21 @@ class ApiClient {
     final data = jsonDecode(res.body) as Map<String, dynamic>;
     return data['subscription_id'] as String;
   }
+
+  Future<Map<String, dynamic>> createCourseSubscription({
+    required String courseId,
+  }) async {
+    final uri = Uri.parse('$_functionsBaseUrl/create-course-subscription');
+    final res = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({'course_id': courseId}),
+    );
+    if (res.statusCode != 200) {
+      throw Exception('Failed to create subscription: ${res.body}');
+    }
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
 }
 
 class PaymentRequiredException implements Exception {

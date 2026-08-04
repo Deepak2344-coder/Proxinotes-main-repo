@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:razorpay_flutter/razorpay_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:notes_app/core/models/course_model.dart';
 import 'package:notes_app/core/models/subject_model.dart';
@@ -8,36 +10,294 @@ import 'package:notes_app/core/widgets/error_display.dart';
 import 'package:notes_app/core/widgets/loading_widget.dart';
 import 'package:notes_app/core/widgets/empty_display.dart';
 import 'package:notes_app/features/browse/presentation/providers/course_provider.dart';
-import 'package:notes_app/features/subscription/presentation/providers/subscription_provider.dart';
-import 'package:notes_app/features/subscription/presentation/screens/subscription_screen.dart';
+import 'package:notes_app/features/subscription/presentation/providers/course_purchase_provider.dart';
 import 'package:notes_app/features/browse/presentation/screens/subject_detail_screen.dart';
 
-class CourseDetailScreen extends ConsumerWidget {
+class CourseDetailScreen extends ConsumerStatefulWidget {
   final CourseModel course;
 
   const CourseDetailScreen({super.key, required this.course});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    bool hasAccess = false;
-    try {
-      final subState = ref.watch(subscriptionProvider);
-      hasAccess = subState.subscription?.isActive == true;
-    } catch (_) {
-      hasAccess = false;
+  ConsumerState<CourseDetailScreen> createState() =>
+      _CourseDetailScreenState();
+}
+
+class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen> {
+  late Razorpay _razorpay;
+
+  @override
+  void initState() {
+    super.initState();
+    _razorpay = Razorpay();
+    _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, _handlePaymentSuccess);
+    _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _handlePaymentError);
+    _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, _handleExternalWallet);
+  }
+
+  @override
+  void dispose() {
+    _razorpay.clear();
+    super.dispose();
+  }
+
+  void _handlePaymentSuccess(PaymentSuccessResponse response) {
+    final purchaseNotifier = ref.read(
+      coursePurchaseProvider(widget.course.id).notifier,
+    );
+    purchaseNotifier.onPaymentSuccess();
+
+    // Poll for access (webhook may take a moment)
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) {
+        ref.read(coursePurchaseProvider(widget.course.id).notifier)
+            .checkAccess(widget.course.id);
+      }
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Subscription activated! Access granted.'),
+        backgroundColor: AppTheme.success,
+      ),
+    );
+  }
+
+  void _handlePaymentError(PaymentFailureResponse response) {
+    ref.read(coursePurchaseProvider(widget.course.id).notifier)
+        .onPaymentError(response.message ?? 'Payment failed');
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(response.message ?? 'Payment failed'),
+        backgroundColor: AppTheme.error,
+      ),
+    );
+  }
+
+  void _handleExternalWallet(ExternalWalletResponse response) {}
+
+  void _showPaymentConfirmation() {
+    final course = widget.course;
+    final price = course.price;
+    final priceStr = price > 0 ? '₹${price.toStringAsFixed(0)}' : 'Free';
+
+    String durationText = 'monthly';
+    if (course.subscriptionEndDate != null) {
+      final end = course.subscriptionEndDate!;
+      final now = DateTime.now();
+      final months = (end.year - now.year) * 12 + (end.month - now.month);
+      if (months > 0) {
+        durationText = '$months month${months > 1 ? 's' : ''} (until ${_formatDate(end)})';
+      }
     }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Subscribe to Course',
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            color: AppTheme.textPrimary,
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              course.name,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.navy.withAlpha(10),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.autorenew, color: AppTheme.navy, size: 20),
+                      const SizedBox(width: 10),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Monthly autopay',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                          Text(
+                            '$priceStr/month',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.navy,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Icon(Icons.calendar_today, color: AppTheme.textSecondary, size: 14),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Duration: $durationText',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Auto-renewing monthly subscription. Access continues until the course end date. Cancel anytime.',
+              style: TextStyle(
+                fontSize: 13,
+                color: AppTheme.textSecondary,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: AppTheme.textSecondary),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              _startSubscription();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.amber,
+              foregroundColor: AppTheme.navy,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: Text(
+              price > 0 ? 'Subscribe $priceStr/mo' : 'Get Access',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${date.day} ${months[date.month - 1]} ${date.year}';
+  }
+
+  Future<void> _startSubscription() async {
+    final purchaseNotifier = ref.read(
+      coursePurchaseProvider(widget.course.id).notifier,
+    );
+    await purchaseNotifier.createSubscription(widget.course.id);
+
+    if (!mounted) return;
+
+    final purchaseState = ref.read(coursePurchaseProvider(widget.course.id));
+
+    if (purchaseState.error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(purchaseState.error!),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+      return;
+    }
+
+    if (purchaseState.hasAccess && purchaseState.razorpaySubscriptionId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Free access granted!'),
+          backgroundColor: AppTheme.success,
+        ),
+      );
+      return;
+    }
+
+    if (purchaseState.razorpaySubscriptionId == null) return;
+
+    final contact = purchaseState.contact ?? '';
+    final email = purchaseState.email ?? Supabase.instance.client.auth.currentUser?.email ?? '';
+    final amount = (widget.course.price * 100).toInt();
+
+    try {
+      _razorpay.open({
+        'key': purchaseState.razorpayKeyId ?? const String.fromEnvironment('RAZORPAY_KEY', defaultValue: ''),
+        'subscription_id': purchaseState.razorpaySubscriptionId,
+        'amount': amount,
+        'currency': 'INR',
+        'name': 'Proxinotes',
+        'description': 'Subscribe: ${widget.course.name}',
+        'prefill': {
+          'contact': contact,
+          'email': email,
+        },
+        'theme': {
+          'color': '#1F2A44',
+        },
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final purchaseState = ref.watch(coursePurchaseProvider(widget.course.id));
+    final hasAccess = purchaseState.hasAccess;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(course.name),
+        title: Text(widget.course.name),
       ),
       body: Column(
         children: [
-          if (!hasAccess) _PurchaseBanner(course: course),
+          if (!hasAccess) _PurchaseBanner(
+            course: widget.course,
+            onSubscribe: _showPaymentConfirmation,
+            isProcessing: purchaseState.isProcessing,
+          ),
           Expanded(
             child: hasAccess
-                ? _SubjectList(course: course)
-                : _LockedView(course: course),
+                ? _SubjectList(course: widget.course)
+                : _LockedView(course: widget.course),
           ),
         ],
       ),
@@ -47,11 +307,21 @@ class CourseDetailScreen extends ConsumerWidget {
 
 class _PurchaseBanner extends StatelessWidget {
   final CourseModel course;
+  final VoidCallback onSubscribe;
+  final bool isProcessing;
 
-  const _PurchaseBanner({required this.course});
+  const _PurchaseBanner({
+    required this.course,
+    required this.onSubscribe,
+    this.isProcessing = false,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final priceStr = course.price > 0
+        ? '₹${course.price.toStringAsFixed(0)}/mo'
+        : 'Free';
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -81,7 +351,9 @@ class _PurchaseBanner extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Subscribe to access all subjects and materials',
+                  course.price > 0
+                      ? 'Subscribe for $priceStr with autopay'
+                      : 'Get free access to this course',
                   style: TextStyle(
                     color: Colors.white.withAlpha(180),
                     fontSize: 12,
@@ -91,13 +363,7 @@ class _PurchaseBanner extends StatelessWidget {
             ),
           ),
           ElevatedButton(
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const SubscriptionScreen(),
-                ),
-              );
-            },
+            onPressed: isProcessing ? null : onSubscribe,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.amber,
               foregroundColor: AppTheme.navy,
@@ -107,13 +373,22 @@ class _PurchaseBanner extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
-            child: Text(
-              course.price > 0 ? '₹${course.price.toStringAsFixed(0)}' : 'Subscribe',
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
-              ),
-            ),
+            child: isProcessing
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppTheme.navy,
+                    ),
+                  )
+                : Text(
+                    course.price > 0 ? priceStr : 'Get Access',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
+                  ),
           ),
         ],
       ),
